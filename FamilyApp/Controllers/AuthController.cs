@@ -57,9 +57,17 @@ public class AuthController : ControllerBase
     {
         var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == dto.Email);
 
-        // ✅ primero el hash guardado, luego el password en texto plano
-        if (user == null || !_pwd.Verify(user.PasswordHash, dto.Password) || !user.IsActive)
+        // Usuario no existe o password incorrecto → 401 genérico
+        if (user == null || !_pwd.Verify(user.PasswordHash, dto.Password))
             return Unauthorized(new { message = "Credenciales inválidas" });
+
+        // Usuario inactivo → 403 con mensaje específico
+        if (!user.IsActive)
+            return StatusCode(StatusCodes.Status403Forbidden, new
+            {
+                code = "inactive",
+                message = "Tu cuenta aún no está activa. Revisa tu correo o contacta soporte."
+            });
 
         var jti = Guid.NewGuid();
         var token = _tokens.CreateToken(user, jti, out var expiresAt);
@@ -161,6 +169,7 @@ public class AuthController : ControllerBase
 
 
     // === FORGOT PASSWORD ===
+    // === FORGOT PASSWORD ===
     [AllowAnonymous]
     [HttpPost("forgot")]
     public async Task<IActionResult> Forgot([FromBody] ForgotPasswordDto dto)
@@ -173,7 +182,7 @@ public class AuthController : ControllerBase
         if (user == null)
             return Ok(new { message = "Si el email existe, se ha enviado un enlace de reseteo." });
 
-        // Generar token y guardar hash
+        // 1) token y hash
         var token = SecureToken.CreateUrlToken(32);
         var tokenHash = SecureToken.Sha256Base64(token);
 
@@ -187,17 +196,21 @@ public class AuthController : ControllerBase
         });
         await _db.SaveChangesAsync();
 
-        // Construir link usando _cfg (NO builder)
-        var frontBase = _cfg["App:FrontendBaseUrl"];
-        var link = !string.IsNullOrWhiteSpace(frontBase)
-            ? $"{frontBase}/reset-password?token={Uri.EscapeDataString(token)}&email={Uri.EscapeDataString(email)}"
-            : $"{Request.Scheme}://{Request.Host}/reset-password?token={Uri.EscapeDataString(token)}&email={Uri.EscapeDataString(email)}";
+        // 2) URL del front desde config (usa SIEMPRE config, nunca Request.Host)
+        //    NOTA: Asegúrate de definir App:FrontendBaseUrl = https://www.familyapp.store
+        var frontBase = _cfg["App:FrontendBaseUrl"] ?? "https://www.familyapp.store";
+        var link = $"{frontBase}/reset-password?token={Uri.EscapeDataString(token)}&email={Uri.EscapeDataString(email)}";
+
+        // 3) Nombre visible (fallback al email) + encode seguro
+        var display = string.IsNullOrWhiteSpace(user.FullName) ? user.Email : user.FullName;
+        string H(string s) => System.Net.WebUtility.HtmlEncode(s);
 
         var html = $@"
-            <p>Hola,</p>
-            <p>Has solicitado restablecer tu contraseña. Haz clic en el siguiente enlace:</p>
-            <p><a href=""{link}"">Restablecer contraseña</a></p>
-            <p>El enlace caduca en 30 minutos. Si no lo solicitaste, ignora este correo.</p>";
+        <p>Hola {H(display)},</p>
+        <p>Has solicitado restablecer tu contraseña. Haz clic en el siguiente enlace:</p>
+        <p><a href=""{H(link)}"">Restablecer contraseña</a></p>
+        <p>Si no funciona, copia y pega esta URL en tu navegador:<br/>{H(link)}</p>
+        <p>El enlace caduca en 30 minutos. Si no lo solicitaste, ignora este correo.</p>";
 
         await _mailer.SendAsync(user.Email, "Restablecer contraseña - FamilyApp", html);
 
@@ -209,7 +222,8 @@ public class AuthController : ControllerBase
 
 
 
-[AllowAnonymous]
+
+    [AllowAnonymous]
     [HttpPost("reset-password")]
     public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordDto dto)
     {

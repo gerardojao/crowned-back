@@ -80,6 +80,15 @@ builder.Services
                 {
                     var db = ctx.HttpContext.RequestServices.GetRequiredService<dbContext>();
                     var principal = ctx.Principal!;
+                    // === BYPASS PARA TOKENS DE PRUEBA ===
+                    // Si el token trae claim trial=1, NO consultamos DB ni exigimos sub numérico.
+                    var isTrial = principal.HasClaim(c => c.Type == "trial" && c.Value == "1");
+                    if (isTrial)
+                    {
+                        // Opcional: también puedes validar expiración aquí si quieres lógica extra.
+                        return; // ? damos por válida la sesión de prueba
+                    }
+                    // ====================================
                     var sub = principal.FindFirstValue(ClaimTypes.NameIdentifier) ?? principal.FindFirstValue("sub");
                     var jti = principal.FindFirstValue("jti");
 

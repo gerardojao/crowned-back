@@ -1,37 +1,70 @@
-﻿// Services/DevEmailSender.cs
+﻿// Services/SmtpEmailSender.cs
+using System.Net;
+using System.Net.Mail;
+using System.Text;
+using System.Text.RegularExpressions;
+
 namespace FamilyApp.Services
 {
     public class SmtpEmailSender : IEmailSender
     {
         private readonly IConfiguration _cfg;
         public SmtpEmailSender(IConfiguration cfg) => _cfg = cfg;
-        public async Task SendAsync(string to, string subject, string htmlBody)
+
+        public async Task SendAsync(string to, string subject, string htmlBody, string? replyTo = null, string? fromName = null)
         {
             var host = _cfg["Smtp:Host"] ?? "smtp.resend.com";
             var port = int.TryParse(_cfg["Smtp:Port"], out var p) ? p : 587;
             var user = _cfg["Smtp:User"] ?? "resend";
-            var pass = _cfg["Smtp:Pass"];               
+            var pass = _cfg["Smtp:Pass"];
             var from = _cfg["Smtp:From"] ?? "no-reply@familyapp.store";
-            var html = $@"
-              <p>Hola{(string.IsNullOrWhiteSpace(user) ? "" : $" ")},</p>
-              <p>Has solicitado restablecer tu contraseña. Haz clic en el siguiente enlace:</p>
-              <p><a href="""">Restablecer contraseña</a></p>
-              <p>El enlace caduca en 30 minutos. Si no lo solicitaste, ignora este correo.</p>";
+            var display = string.IsNullOrWhiteSpace(fromName) ? "FamilyApp" : fromName;
 
-            using var client = new System.Net.Mail.SmtpClient(host, port)
+            using var client = new SmtpClient(host, port)
             {
                 EnableSsl = true,
-                Credentials = new System.Net.NetworkCredential(user, pass)
+                Credentials = new NetworkCredential(user, pass),
+                DeliveryMethod = SmtpDeliveryMethod.Network,
+                Timeout = 15000
             };
 
-            using var msg = new System.Net.Mail.MailMessage(from, to)
+            using var msg = new MailMessage()
             {
+                From = new MailAddress(from, display, Encoding.UTF8),
                 Subject = subject,
-                Body = html,
-                IsBodyHtml = true
+                SubjectEncoding = Encoding.UTF8,
+                BodyEncoding = Encoding.UTF8,
+                IsBodyHtml = true,
+                Body = string.IsNullOrWhiteSpace(htmlBody) ? "<p>(sin contenido)</p>" : htmlBody
             };
+
+            // Soportar múltiples destinatarios separados por coma/semicolon
+            foreach (var addr in to.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                msg.To.Add(addr.Trim());
+            }
+
+            // Reply-To (para que al responder vaya al email del usuario)
+            if (!string.IsNullOrWhiteSpace(replyTo))
+                msg.ReplyToList.Add(new MailAddress(replyTo.Trim()));
+
+            // Alternativa de texto plano (ayuda a entregabilidad)
+            var plain = StripHtml(msg.Body);
+            var altText = AlternateView.CreateAlternateViewFromString(plain, Encoding.UTF8, "text/plain");
+            var altHtml = AlternateView.CreateAlternateViewFromString(msg.Body, Encoding.UTF8, "text/html");
+            msg.AlternateViews.Add(altText);
+            msg.AlternateViews.Add(altHtml);
 
             await client.SendMailAsync(msg);
+        }
+
+        private static string StripHtml(string html)
+        {
+            if (string.IsNullOrWhiteSpace(html)) return "(sin contenido)";
+            var text = Regex.Replace(html, "<br ?/?>", "\n", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, "</p>", "\n\n", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, "<.*?>", string.Empty);
+            return WebUtility.HtmlDecode(text).Trim();
         }
     }
 }
