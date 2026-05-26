@@ -25,7 +25,7 @@ namespace FamilyApp.Services
                 EnableSsl = true,
                 Credentials = new NetworkCredential(user, pass),
                 DeliveryMethod = SmtpDeliveryMethod.Network,
-                Timeout = 15000
+                Timeout = 55000
             };
 
             using var msg = new MailMessage()

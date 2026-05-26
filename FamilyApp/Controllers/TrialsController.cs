@@ -34,12 +34,13 @@ public class TrialsController : ControllerBase
         var expires = DateTime.UtcNow.AddHours(hours);
         var secret = _cfg["Trials:LinkSecret"] ?? throw new Exception("Trials:LinkSecret missing");
         var appBase =
-        _cfg["App:AppBaseUrl"] ??
-        _cfg["App:FrontendBaseUrl"] ??      // si usas esta
-        _cfg["Frontend:BaseUrl"] ??         // si usas esta
-        "https://www.familyapp.store";
+            _cfg["Frontend:BaseUrl"] ??
+            _cfg["App:FrontendBaseUrl"] ??
+            _cfg["App:AppBaseUrl"] ??
+            $"{Request.Scheme}://{Request.Host.Value}" ??
+            "https://www.familyapp.store";
 
-            var landingBase =
+        var landingBase =
                 _cfg["App:LandingBaseUrl"] ??
                 _cfg["Frontend:LandingBaseUrl"] ??  // por si tuvieras esta
                 "https://family-app-landing.vercel.app";

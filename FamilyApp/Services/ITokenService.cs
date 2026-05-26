@@ -43,13 +43,16 @@ namespace FamilyApp.Services
                 new Claim(JwtRegisteredClaimNames.Jti, jti.ToString()),
             };
 
+            expiresAt = DateTime.UtcNow.AddHours(12);
+
             var token = new JwtSecurityToken(
                 issuer: issuer,
                 audience: audience,
                 claims: claims,
                 notBefore: DateTime.UtcNow,
                 expires: expiresAt,
-                signingCredentials: creds
+                //signingCredentials: creds
+                signingCredentials: new SigningCredentials(key, SecurityAlgorithms.HmacSha256)
             );
 
             return new JwtSecurityTokenHandler().WriteToken(token);

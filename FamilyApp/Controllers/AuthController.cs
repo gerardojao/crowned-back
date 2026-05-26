@@ -8,6 +8,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
+
 
 [ApiController]
 [Route("api/[controller]")]
@@ -52,16 +54,51 @@ public class AuthController : ControllerBase
         });
 
 
+    //[HttpPost("login")]
+    //public async Task<IActionResult> Login([FromBody] LoginDto dto)
+    //{
+    //    var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == dto.Email);
+
+    //    // Usuario no existe o password incorrecto → 401 genérico
+    //    if (user == null || !_pwd.Verify(user.PasswordHash, dto.Password))
+    //        return Unauthorized(new { message = "Credenciales inválidas" });
+
+    //    // Usuario inactivo → 403 con mensaje específico
+    //    if (!user.IsActive)
+    //        return StatusCode(StatusCodes.Status403Forbidden, new
+    //        {
+    //            code = "inactive",
+    //            message = "Tu cuenta aún no está activa. Revisa tu correo o contacta soporte."
+    //        });
+
+    //    var jti = Guid.NewGuid();
+    //    var token = _tokens.CreateToken(user, jti, out var expiresAt);
+
+    //    user.ActiveSessionJti = jti;
+    //    user.ActiveSessionExpiresAt = expiresAt;
+    //    await _db.SaveChangesAsync();
+    //    var isProd = Request.Host.Host.EndsWith("familyapp.store", StringComparison.OrdinalIgnoreCase);
+    //    Response.Cookies.Append(".familyapp.auth", token, new CookieOptions
+    //    {
+    //        Domain = isProd ? ".familyapp.store" : null,
+    //        Path = "/",
+    //        HttpOnly = true,
+    //        Secure = true,
+    //        SameSite = SameSiteMode.None,
+    //        Expires = expiresAt
+    //    });
+
+    //    return Ok(new { token, expiresAt, user = new { user.Id, user.Email, user.Role } });
+    //}
+
+    [AllowAnonymous]
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginDto dto)
     {
         var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == dto.Email);
-
-        // Usuario no existe o password incorrecto → 401 genérico
         if (user == null || !_pwd.Verify(user.PasswordHash, dto.Password))
             return Unauthorized(new { message = "Credenciales inválidas" });
 
-        // Usuario inactivo → 403 con mensaje específico
         if (!user.IsActive)
             return StatusCode(StatusCodes.Status403Forbidden, new
             {
@@ -71,29 +108,72 @@ public class AuthController : ControllerBase
 
         var jti = Guid.NewGuid();
         var token = _tokens.CreateToken(user, jti, out var expiresAt);
-
         user.ActiveSessionJti = jti;
         user.ActiveSessionExpiresAt = expiresAt;
         await _db.SaveChangesAsync();
 
+        var isProd = _env.IsProduction();
+        var cookieOptions = new CookieOptions
+        {
+            Path = "/",
+            HttpOnly = true,
+            Secure = true,
+            SameSite = SameSiteMode.None,
+            Expires = expiresAt
+            // Domain sólo en prod (multi-subdominio):
+            // Domain = isProd ? ".familyapp.store" : null
+        };
+        if (_env.IsDevelopment())
+        {
+            cookieOptions.SameSite = SameSiteMode.Lax; // evita bloqueo 3P
+            cookieOptions.Secure = false;            // permite http en local
+        }
+        else
+        {
+            cookieOptions.SameSite = SameSiteMode.None;
+            cookieOptions.Secure = true;
+            cookieOptions.Domain = ".familyapp.store";
+        }
+
+        //if (isProd) cookieOptions.Domain = ".familyapp.store";
+
+        Response.Cookies.Append(".familyapp.auth", token, cookieOptions);
+
         return Ok(new { token, expiresAt, user = new { user.Id, user.Email, user.Role } });
     }
 
-
-    [Authorize]
+    
+    [AllowAnonymous]
     [HttpPost("logout")]
     public async Task<IActionResult> Logout()
     {
-        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
-        if (!int.TryParse(userIdStr, out var userId)) return Unauthorized();
+        // Opcional: si hay auth y quieres limpiar sesión única en DB
+        if (User?.Identity?.IsAuthenticated == true)
+        {
+            var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
+            if (int.TryParse(userIdStr, out var userId))
+            {
+                var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId);
+                if (user != null)
+                {
+                    user.ActiveSessionJti = null;
+                    user.ActiveSessionExpiresAt = null;
+                    await _db.SaveChangesAsync();
+                }
+            }
+        }
 
-        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId);
-        if (user == null) return Unauthorized();
+        var isProd = _env.IsProduction();
+        var cookieOptions = new CookieOptions
+        {
+            Path = "/",
+            HttpOnly = true,
+            Secure = true,
+            SameSite = SameSiteMode.None
+        };
+        if (isProd) cookieOptions.Domain = ".familyapp.store";
 
-        user.ActiveSessionJti = null;
-        user.ActiveSessionExpiresAt = null;
-        await _db.SaveChangesAsync();
-
+        Response.Cookies.Delete(".familyapp.auth", cookieOptions);
         return Ok(new { message = "Sesión cerrada." });
     }
 
@@ -166,9 +246,6 @@ public class AuthController : ControllerBase
         });
     }
 
-
-
-    // === FORGOT PASSWORD ===
     // === FORGOT PASSWORD ===
     [AllowAnonymous]
     [HttpPost("forgot")]
@@ -220,6 +297,24 @@ public class AuthController : ControllerBase
         return Ok(new { message = "Si el email existe, se ha enviado un enlace de reseteo." });
     }
 
+
+    [Authorize]
+    [HttpGet("me")]
+    public IActionResult Me()
+    {
+        Response.Headers["Cache-Control"] = "no-store, no-cache, must-revalidate";
+        Response.Headers["Pragma"] = "no-cache";
+        Response.Headers["Vary"] = "Cookie";
+
+        return Ok(new
+        {
+            sub = User.FindFirst("sub")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value,
+            email = User.FindFirst("email")?.Value,
+            name = User.Identity?.Name,
+            roles = User.FindAll(ClaimTypes.Role).Select(r => r.Value).ToArray(),
+            jti = User.FindFirst("jti")?.Value
+        });
+    }
 
 
 
