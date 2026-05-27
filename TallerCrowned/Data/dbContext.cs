@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using FamilyApp.Models;
 using Microsoft.EntityFrameworkCore;
+using TallerCrowned.Models;
 
 namespace FamilyApp.Data;
 
@@ -23,6 +24,10 @@ public partial class dbContext : DbContext
     public virtual DbSet<Ingreso> Ingresos { get; set; }
     public virtual DbSet<AppUser> Users { get; set; }
     public DbSet<PasswordReset> PasswordResets { get; set; } = default!;
+    public virtual DbSet<OrdenTrabajo> OrdenesTrabajo { get; set; }
+    public virtual DbSet<Cliente> Clientes { get; set; }
+
+    public virtual DbSet<Proveedor> Proveedores { get; set; }
 
     // --- Auditoría automática ---
     public override int SaveChanges()
@@ -177,8 +182,196 @@ public partial class dbContext : DbContext
             b.HasIndex("UsuarioCreacion", "Eliminado", "Fecha");
         });
 
+        modelBuilder.Entity<OrdenTrabajo>(b =>
+        {
+            b.ToTable("OrdenTrabajo");
+
+            b.Property(e => e.Cliente)
+                .HasMaxLength(150)
+                .IsUnicode(false)
+                .IsRequired();
+
+            b.Property(e => e.Telefono)
+                .HasMaxLength(30)
+                .IsUnicode(false)
+                .IsRequired(false);
+
+            b.Property(e => e.Matricula)
+                .HasMaxLength(20)
+                .IsUnicode(false)
+                .IsRequired();
+
+            b.Property(e => e.Marca)
+                .HasMaxLength(80)
+                .IsUnicode(false)
+                .IsRequired(false);
+
+            b.Property(e => e.Modelo)
+                .HasMaxLength(80)
+                .IsUnicode(false)
+                .IsRequired();
+
+            b.Property(e => e.Kilometraje)
+                .IsRequired(false);
+
+            b.Property(e => e.Fecha)
+                .HasColumnType("datetime");
+
+            b.Property(e => e.Trabajo)
+                .HasMaxLength(500)
+                .IsUnicode(false)
+                .IsRequired();
+
+            b.Property(e => e.Repuestos)
+                .HasColumnType("decimal(18, 2)");
+
+            b.Property(e => e.ManoObra)
+                .HasColumnType("decimal(18, 2)");
+
+            b.Property(e => e.Estado)
+                .HasMaxLength(50)
+                .IsUnicode(false)
+                .IsRequired();
+
+            b.Property(e => e.Observaciones)
+                .HasMaxLength(500)
+                .IsUnicode(false)
+                .IsRequired(false);
+
+            b.Property(e => e.Eliminado)
+                .HasDefaultValue(false);
+
+            // auditoría sombra
+            b.Property<bool>("Activo").HasDefaultValue(true);
+            b.Property<string>("UsuarioCreacion").HasMaxLength(64);
+            b.Property<DateTime>("FechaCreacion");
+            b.Property<string>("UsuarioModificacion").HasMaxLength(64);
+            b.Property<DateTime>("FechaModificacion");
+
+            b.HasIndex("UsuarioCreacion", "Eliminado", "Fecha");
+            b.HasIndex(e => e.Matricula);
+        });
+
+        modelBuilder.Entity<Cliente>(b =>
+        {
+            b.ToTable("Cliente");
+
+            b.Property(e => e.Nombre)
+                .HasMaxLength(150)
+                .IsUnicode(false)
+                .IsRequired();
+
+            b.Property(e => e.Telefono)
+                .HasMaxLength(30)
+                .IsUnicode(false)
+                .IsRequired();
+
+            b.Property(e => e.Email)
+                .HasMaxLength(150)
+                .IsUnicode(false)
+                .IsRequired(false);
+
+            b.Property(e => e.Direccion)
+                .HasMaxLength(250)
+                .IsUnicode(false)
+                .IsRequired(false);
+
+            b.Property(e => e.Matricula)
+                .HasMaxLength(20)
+                .IsUnicode(false)
+                .IsRequired();
+
+            b.Property(e => e.Marca)
+                .HasMaxLength(80)
+                .IsUnicode(false)
+                .IsRequired(false);
+
+            b.Property(e => e.Modelo)
+                .HasMaxLength(80)
+                .IsUnicode(false)
+                .IsRequired();
+
+            b.Property(e => e.Observaciones)
+                .HasMaxLength(500)
+                .IsUnicode(false)
+                .IsRequired(false);
+
+            b.Property(e => e.Eliminado)
+                .HasDefaultValue(false);
+
+            b.Property<bool>("Activo").HasDefaultValue(true);
+            b.Property<string>("UsuarioCreacion").HasMaxLength(64);
+            b.Property<DateTime>("FechaCreacion");
+            b.Property<string>("UsuarioModificacion").HasMaxLength(64);
+            b.Property<DateTime>("FechaModificacion");
+
+            b.HasIndex(e => e.Matricula);
+            b.HasIndex(e => e.Telefono);
+            b.HasIndex("UsuarioCreacion", "Eliminado");
+        });
+
+        modelBuilder.Entity<Proveedor>(b =>
+        {
+            b.ToTable("Proveedor");
+
+            b.Property(e => e.Nombre)
+                .HasMaxLength(150)
+                .IsUnicode(false)
+                .IsRequired();
+
+            b.Property(e => e.Contacto)
+                .HasMaxLength(150)
+                .IsUnicode(false)
+                .IsRequired(false);
+
+            b.Property(e => e.Telefono)
+                .HasMaxLength(30)
+                .IsUnicode(false)
+                .IsRequired(false);
+
+            b.Property(e => e.Email)
+                .HasMaxLength(150)
+                .IsUnicode(false)
+                .IsRequired(false);
+
+            b.Property(e => e.Direccion)
+                .HasMaxLength(250)
+                .IsUnicode(false)
+                .IsRequired(false);
+
+            b.Property(e => e.Categoria)
+                .HasMaxLength(80)
+                .IsUnicode(false)
+                .IsRequired(false);
+
+            b.Property(e => e.NifCif)
+                .HasMaxLength(30)
+                .IsUnicode(false)
+                .IsRequired(false);
+
+            b.Property(e => e.Observaciones)
+                .HasMaxLength(500)
+                .IsUnicode(false)
+                .IsRequired(false);
+
+            b.Property(e => e.Eliminado)
+                .HasDefaultValue(false);
+
+            b.Property<bool>("Activo").HasDefaultValue(true);
+            b.Property<string>("UsuarioCreacion").HasMaxLength(64);
+            b.Property<DateTime>("FechaCreacion");
+            b.Property<string>("UsuarioModificacion").HasMaxLength(64);
+            b.Property<DateTime>("FechaModificacion");
+
+            b.HasIndex(e => e.Nombre);
+            b.HasIndex(e => e.Categoria);
+            b.HasIndex("UsuarioCreacion", "Eliminado");
+        });
+
         OnModelCreatingPartial(modelBuilder);
     }
+
+
 
     partial void OnModelCreatingPartial(ModelBuilder modelBuilder);
 }
