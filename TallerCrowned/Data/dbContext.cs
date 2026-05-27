@@ -28,6 +28,7 @@ public partial class dbContext : DbContext
     public virtual DbSet<Cliente> Clientes { get; set; }
 
     public virtual DbSet<Proveedor> Proveedores { get; set; }
+    public virtual DbSet<RepuestoStock> RepuestosStock { get; set; }
 
     // --- Auditoría automática ---
     public override int SaveChanges()
@@ -365,6 +366,66 @@ public partial class dbContext : DbContext
 
             b.HasIndex(e => e.Nombre);
             b.HasIndex(e => e.Categoria);
+            b.HasIndex("UsuarioCreacion", "Eliminado");
+        });
+
+        modelBuilder.Entity<RepuestoStock>(b =>
+        {
+            b.ToTable("RepuestoStock");
+
+            b.HasKey(x => x.Id);
+
+            b.Property(x => x.Nombre)
+                .HasMaxLength(150)
+                .IsUnicode(false)
+                .IsRequired();
+
+            b.Property(x => x.CodigoReferencia)
+                .HasMaxLength(80)
+                .IsUnicode(false);
+
+            b.Property(x => x.Marca)
+                .HasMaxLength(80)
+                .IsUnicode(false);
+
+            b.Property(x => x.Categoria)
+                .HasMaxLength(80)
+                .IsUnicode(false);
+
+            b.Property(x => x.Ubicacion)
+                .HasMaxLength(100)
+                .IsUnicode(false);
+
+            b.Property(x => x.Observaciones)
+                .HasMaxLength(500)
+                .IsUnicode(false);
+
+            b.Property(x => x.PrecioCompra)
+                .HasColumnType("decimal(18,2)");
+
+            b.Property(x => x.PrecioVenta)
+                .HasColumnType("decimal(18,2)");
+
+            b.Property(x => x.StockMinimo)
+                .HasDefaultValue(3);
+
+            b.Property(x => x.Eliminado)
+                .HasDefaultValue(false);
+
+            b.HasOne(x => x.Proveedor)
+                .WithMany()
+                .HasForeignKey(x => x.IdProveedor)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            b.HasIndex(x => x.Nombre);
+            b.HasIndex(x => x.Categoria);
+            b.HasIndex(x => x.CodigoReferencia);
+            b.Property<bool>("Activo").HasDefaultValue(true);
+            b.Property<string>("UsuarioCreacion").HasMaxLength(64);
+            b.Property<DateTime>("FechaCreacion");
+            b.Property<string>("UsuarioModificacion").HasMaxLength(64);
+            b.Property<DateTime>("FechaModificacion");
+
             b.HasIndex("UsuarioCreacion", "Eliminado");
         });
 
