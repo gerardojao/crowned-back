@@ -45,6 +45,18 @@ namespace TallerCrowned.Controllers
                     query = query.Where(x => x.Matricula.ToLower().Contains(matricula));
                 }
 
+                if (filter.FechaDesde.HasValue)
+                {
+                    var desde = filter.FechaDesde.Value.Date;
+                    query = query.Where(x => x.Fecha >= desde);
+                }
+
+                if (filter.FechaHasta.HasValue)
+                {
+                    var hasta = filter.FechaHasta.Value.Date.AddDays(1);
+                    query = query.Where(x => x.Fecha < hasta);
+                }
+
                 if (!string.IsNullOrWhiteSpace(filter.Cliente))
                 {
                     var cliente = filter.Cliente.Trim().ToLower();
@@ -82,7 +94,8 @@ namespace TallerCrowned.Controllers
                         Repuestos = x.Repuestos,
                         ManoObra = x.ManoObra,
                         Estado = x.Estado,
-                        Observaciones = x.Observaciones
+                        Observaciones = x.Observaciones,
+                        Facturada = x.Facturada
                     })
                     .ToListAsync();
 
@@ -142,7 +155,8 @@ namespace TallerCrowned.Controllers
                         Repuestos = x.Repuestos,
                         ManoObra = x.ManoObra,
                         Estado = x.Estado,
-                        Observaciones = x.Observaciones
+                        Observaciones = x.Observaciones,
+                        Facturada = x.Facturada
                     })
                     .ToListAsync();
 
@@ -371,6 +385,32 @@ namespace TallerCrowned.Controllers
                 respuesta.Message = e.Message + (e.InnerException != null ? " " + e.InnerException.Message : "");
                 return Ok(respuesta);
             }
+        }
+
+        [HttpPut("{id:int}/facturada")]
+        public async Task<ActionResult> MarcarFacturada(int id)
+        {
+            var respuesta = new Respuesta<object>();
+
+            var orden = await _context.OrdenesTrabajo
+                .FirstOrDefaultAsync(x => x.Id == id && !x.Eliminado);
+
+            if (orden == null)
+            {
+                respuesta.Ok = 0;
+                respuesta.Message = "No existe la orden.";
+                return NotFound(respuesta);
+            }
+
+            orden.Facturada = true;
+
+            await _context.SaveChangesAsync();
+
+            respuesta.Ok = 1;
+            respuesta.Message = "Orden marcada como facturada.";
+            respuesta.Data.Add(new { orden.Id, orden.Facturada });
+
+            return Ok(respuesta);
         }
 
         [HttpDelete("{id:int}")]

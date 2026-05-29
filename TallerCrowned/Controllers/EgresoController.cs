@@ -372,8 +372,95 @@ namespace FamilyApp.Controllers
             return Ok(respuesta);
         }
 
-       
+        [HttpPut("{id:int}")]
+        public async Task<ActionResult> PutEgreso(int id, [FromBody] Egreso dto)
+        {
+            var respuesta = new Respuesta<object>();
 
+            try
+            {
+                var egreso = await _context.Egresos
+                    .FirstOrDefaultAsync(x => x.Id == id);
+
+                if (egreso == null)
+                {
+                    respuesta.Ok = 0;
+                    respuesta.Message = "No existe el egreso.";
+                    return NotFound(respuesta);
+                }
+
+                if (string.IsNullOrWhiteSpace(dto.Nombre))
+                    return BadRequest(new { message = "El nombre del egreso es requerido." });
+
+                egreso.Nombre = dto.Nombre.Trim();
+
+                await _context.SaveChangesAsync();
+
+                respuesta.Ok = 1;
+                respuesta.Message = "Egreso actualizado correctamente.";
+                respuesta.Data.Add(new
+                {
+                    egreso.Id,
+                    egreso.Nombre
+                });
+
+                return Ok(respuesta);
+            }
+            catch (Exception e)
+            {
+                respuesta.Ok = 0;
+                respuesta.Message = e.Message + (e.InnerException != null ? " " + e.InnerException.Message : "");
+                return Ok(respuesta);
+            }
+        }
+
+        [HttpDelete("{id:int}")]
+        public async Task<ActionResult> DeleteEgreso(int id)
+        {
+            var respuesta = new Respuesta<object>();
+
+            try
+            {
+                var egreso = await _context.Egresos
+                    .FirstOrDefaultAsync(x => x.Id == id);
+
+                if (egreso == null)
+                {
+                    respuesta.Ok = 0;
+                    respuesta.Message = "No existe el egreso.";
+                    return NotFound(respuesta);
+                }
+
+                var tieneMovimientos = await _context.FichaEgresos
+                    .AnyAsync(x => x.NombreEgreso == id && !x.Eliminado);
+
+                if (tieneMovimientos)
+                {
+                    respuesta.Ok = 0;
+                    respuesta.Message = "No se puede eliminar este tipo de gasto porque tiene movimientos registrados.";
+                    return BadRequest(respuesta);
+                }
+
+                _context.Egresos.Remove(egreso);
+                await _context.SaveChangesAsync();
+
+                respuesta.Ok = 1;
+                respuesta.Message = "Tipo de gasto eliminado correctamente.";
+                respuesta.Data.Add(new
+                {
+                    egreso.Id,
+                    egreso.Nombre
+                });
+
+                return Ok(respuesta);
+            }
+            catch (Exception e)
+            {
+                respuesta.Ok = 0;
+                respuesta.Message = e.Message + (e.InnerException != null ? " " + e.InnerException.Message : "");
+                return Ok(respuesta);
+            }
+        }
 
     }
 }

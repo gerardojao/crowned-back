@@ -30,6 +30,10 @@ public partial class dbContext : DbContext
     public virtual DbSet<Proveedor> Proveedores { get; set; }
     public virtual DbSet<RepuestoStock> RepuestosStock { get; set; }
 
+    public virtual DbSet<NumeradorFactura> NumeradoresFactura { get; set; }
+
+    public virtual DbSet<FacturaEmitida> FacturasEmitidas { get; set; }
+
     // --- Auditoría automática ---
     public override int SaveChanges()
     {
@@ -239,6 +243,9 @@ public partial class dbContext : DbContext
                 .IsUnicode(false)
                 .IsRequired(false);
 
+            b.Property(e => e.Facturada)
+                 .HasDefaultValue(false);
+
             b.Property(e => e.Eliminado)
                 .HasDefaultValue(false);
 
@@ -426,6 +433,67 @@ public partial class dbContext : DbContext
             b.Property<string>("UsuarioModificacion").HasMaxLength(64);
             b.Property<DateTime>("FechaModificacion");
 
+            b.HasIndex("UsuarioCreacion", "Eliminado");
+        });
+
+        modelBuilder.Entity<NumeradorFactura>(b =>
+        {
+            b.ToTable("NumeradorFactura");
+
+            b.HasKey(x => x.Id);
+
+            b.Property(x => x.Anio)
+                .IsRequired();
+
+            b.Property(x => x.UltimoNumero)
+                .IsRequired();
+
+            b.HasIndex(x => x.Anio)
+                .IsUnique();
+        });
+
+        modelBuilder.Entity<FacturaEmitida>(b =>
+        {
+            b.ToTable("FacturaEmitida");
+
+            b.HasKey(x => x.Id);
+
+            b.Property(x => x.NumeroFactura)
+                .HasMaxLength(30)
+                .IsUnicode(false)
+                .IsRequired();
+
+            b.Property(x => x.Cliente)
+                .HasMaxLength(150)
+                .IsUnicode(false)
+                .IsRequired();
+
+            b.Property(x => x.Dni).HasMaxLength(30).IsUnicode(false);
+            b.Property(x => x.DireccionCliente).HasMaxLength(250).IsUnicode(false);
+            b.Property(x => x.TelefonoCliente).HasMaxLength(30).IsUnicode(false);
+            b.Property(x => x.Matricula).HasMaxLength(20).IsUnicode(false);
+            b.Property(x => x.Km).HasMaxLength(30).IsUnicode(false);
+            b.Property(x => x.Observaciones).HasMaxLength(1000).IsUnicode(false);
+
+            b.Property(x => x.ItemsJson)
+                .HasColumnType("nvarchar(max)")
+                .IsRequired();
+
+            b.Property(x => x.Subtotal).HasColumnType("decimal(18,2)");
+            b.Property(x => x.Iva).HasColumnType("decimal(18,2)");
+            b.Property(x => x.Otros).HasColumnType("decimal(18,2)");
+            b.Property(x => x.Total).HasColumnType("decimal(18,2)");
+
+            b.Property(x => x.Eliminado).HasDefaultValue(false);
+
+            b.Property<bool>("Activo").HasDefaultValue(true);
+            b.Property<string>("UsuarioCreacion").HasMaxLength(64);
+            b.Property<DateTime>("FechaCreacion");
+            b.Property<string>("UsuarioModificacion").HasMaxLength(64);
+            b.Property<DateTime>("FechaModificacion");
+
+            b.HasIndex(x => x.NumeroFactura).IsUnique();
+            b.HasIndex(x => x.IdOrdenTrabajo);
             b.HasIndex("UsuarioCreacion", "Eliminado");
         });
 

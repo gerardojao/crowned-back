@@ -395,5 +395,95 @@ namespace FamilyApp.Controllers
             }
         }
 
+        [HttpPut("{id:int}")]
+        public async Task<ActionResult> PutIngreso(int id, [FromBody] Ingreso dto)
+        {
+            var respuesta = new Respuesta<object>();
+
+            try
+            {
+                var ingreso = await _context.Ingresos
+                    .FirstOrDefaultAsync(x => x.Id == id);
+
+                if (ingreso == null)
+                {
+                    respuesta.Ok = 0;
+                    respuesta.Message = "No existe el ingreso.";
+                    return NotFound(respuesta);
+                }
+
+                if (string.IsNullOrWhiteSpace(dto.NombreIngreso))
+                    return BadRequest(new { message = "El nombre del ingreso es requerido." });
+
+                ingreso.NombreIngreso = dto.NombreIngreso.Trim();
+
+                await _context.SaveChangesAsync();
+
+                respuesta.Ok = 1;
+                respuesta.Message = "Ingreso actualizado correctamente.";
+                respuesta.Data.Add(new
+                {
+                    ingreso.Id,
+                    ingreso.NombreIngreso
+                });
+
+                return Ok(respuesta);
+            }
+            catch (Exception e)
+            {
+                respuesta.Ok = 0;
+                respuesta.Message = e.Message + (e.InnerException != null ? " " + e.InnerException.Message : "");
+                return Ok(respuesta);
+            }
+        }
+
+        [HttpDelete("{id:int}")]
+        public async Task<ActionResult> DeleteIngreso(int id)
+        {
+            var respuesta = new Respuesta<object>();
+
+            try
+            {
+                var ingreso = await _context.Ingresos
+                    .FirstOrDefaultAsync(x => x.Id == id);
+
+                if (ingreso == null)
+                {
+                    respuesta.Ok = 0;
+                    respuesta.Message = "No existe el ingreso.";
+                    return NotFound(respuesta);
+                }
+
+                var tieneMovimientos = await _context.FichaIngresos
+                    .AnyAsync(x => x.NombreIngreso == id && !x.Eliminado);
+
+                if (tieneMovimientos)
+                {
+                    respuesta.Ok = 0;
+                    respuesta.Message = "No se puede eliminar este tipo de ingreso porque tiene movimientos registrados.";
+                    return BadRequest(respuesta);
+                }
+
+                _context.Ingresos.Remove(ingreso);
+                await _context.SaveChangesAsync();
+
+                respuesta.Ok = 1;
+                respuesta.Message = "Tipo de ingreso eliminado correctamente.";
+                respuesta.Data.Add(new
+                {
+                    ingreso.Id,
+                    ingreso.NombreIngreso
+                });
+
+                return Ok(respuesta);
+            }
+            catch (Exception e)
+            {
+                respuesta.Ok = 0;
+                respuesta.Message = e.Message + (e.InnerException != null ? " " + e.InnerException.Message : "");
+                return Ok(respuesta);
+            }
+        }
+
     }
 }

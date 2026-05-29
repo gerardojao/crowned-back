@@ -22,6 +22,7 @@
         public string Estado { get; set; } = "Recibido";
 
         public string? Observaciones { get; set; }
+        public bool Facturada { get; set; }
 
         public bool Eliminado { get; set; }
     }
