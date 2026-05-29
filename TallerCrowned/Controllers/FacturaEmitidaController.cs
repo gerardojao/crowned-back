@@ -4,7 +4,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Globalization;
+using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using TallerCrowned.Models;
 
 namespace TallerCrowned.Controllers
@@ -65,6 +67,7 @@ namespace TallerCrowned.Controllers
                 };
 
                 _context.FacturasEmitidas.Add(factura);
+                await _context.SaveChangesAsync();
 
                 await CrearIngresoAutomaticoSiAplica(factura);
 
@@ -105,13 +108,22 @@ namespace TallerCrowned.Controllers
             if (string.IsNullOrWhiteSpace(factura.ItemsJson))
                 return;
 
-            var items = JsonSerializer.Deserialize<List<FacturaItemDTO>>(
-                factura.ItemsJson,
-                new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                }
-            );
+            List<FacturaItemDTO>? items;
+
+            try
+            {
+                items = JsonSerializer.Deserialize<List<FacturaItemDTO>>(
+                    factura.ItemsJson,
+                    new JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true
+                    }
+                );
+            }
+            catch
+            {
+                return;
+            }
 
             if (items == null || items.Count == 0)
                 return;
@@ -135,14 +147,16 @@ namespace TallerCrowned.Controllers
                     d.Contains("servicio externo")
             };
 
+            var debeCrearAlertaAceite = false;
+
             foreach (var item in items)
             {
-                var descripcion = item.Descripcion?.Trim() ?? "";
+                var descripcionOriginal = item.Descripcion?.Trim() ?? "";
 
-                if (string.IsNullOrWhiteSpace(descripcion))
+                if (string.IsNullOrWhiteSpace(descripcionOriginal))
                     continue;
 
-                var descLower = descripcion.ToLower();
+                string descLower = NormalizarTexto(descripcionOriginal);
 
                 foreach (var regla in reglas)
                 {
@@ -150,6 +164,9 @@ namespace TallerCrowned.Controllers
                         continue;
 
                     var nombreCuenta = regla.Key;
+
+                    if (nombreCuenta == "Servicio cambio de aceite y filtro")
+                        debeCrearAlertaAceite = true;
 
                     var cuentaIngreso = await _context.Ingresos
                         .FirstOrDefaultAsync(x =>
@@ -169,31 +186,187 @@ namespace TallerCrowned.Controllers
 
                     var importe = item.Cantidad * item.Importe;
 
-                    var yaExiste = await _context.FichaIngresos.AnyAsync(x =>
+                    var yaExisteIngreso = await _context.FichaIngresos.AnyAsync(x =>
                         !x.Eliminado &&
                         x.NombreIngreso == cuentaIngreso.Id &&
                         x.Descripcion != null &&
                         x.Descripcion.Contains(factura.NumeroFactura)
                     );
 
-                    if (yaExiste)
-                        break;
-
-                    _context.FichaIngresos.Add(new FichaIngreso
+                    if (!yaExisteIngreso)
                     {
-                        NombreIngreso = cuentaIngreso.Id,
-                        Fecha = factura.Fecha,
-                        Mes = factura.Fecha.ToString("MMMM", new CultureInfo("es-ES")),
-                        Descripcion = $"Factura {factura.NumeroFactura} - {factura.Cliente} - {descripcion}",
-                        Importe = importe,
-                        Eliminado = false,
-                        FechaEliminacion = null
-                    });
+                        _context.FichaIngresos.Add(new FichaIngreso
+                        {
+                            NombreIngreso = cuentaIngreso.Id,
+                            Fecha = factura.Fecha,
+                            Mes = factura.Fecha.ToString("MMMM", new CultureInfo("es-ES")),
+                            Descripcion = $"Factura {factura.NumeroFactura} - {factura.Cliente} - {descripcionOriginal}",
+                            Importe = importe,
+                            Eliminado = false,
+                            FechaEliminacion = null
+                        });
+                    }
 
                     break;
                 }
             }
+
+            if (debeCrearAlertaAceite)
+            {
+                var yaExisteAlerta = await _context.AlertasClientes.AnyAsync(x =>
+                    !x.Eliminado &&
+                    x.IdFacturaEmitida == factura.Id
+                );
+
+                if (!yaExisteAlerta)
+                {
+                    _context.AlertasClientes.Add(new AlertaCliente
+                    {
+                        Cliente = factura.Cliente,
+                        Telefono = factura.TelefonoCliente,
+                        Mensaje = $"Llamar al cliente {factura.Cliente} al móvil {factura.TelefonoCliente} para indicarle que le toca Servicio de cambio de aceite y filtro.",
+                        FechaAviso = DateTime.UtcNow.AddMonths(1),
+                        Atendida = false,
+                        IdFacturaEmitida = factura.Id,
+                        Eliminado = false
+                    });
+                }
+            }
         }
+
+        private static string NormalizarTexto(string texto)
+        {
+            if (string.IsNullOrWhiteSpace(texto))
+                return "";
+
+            var normalized = texto.Trim().ToLowerInvariant().Normalize(NormalizationForm.FormD);
+
+            var chars = normalized
+                .Where(c => CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark)
+                .ToArray();
+
+            var sinAcentos = new string(chars).Normalize(NormalizationForm.FormC);
+
+            return Regex.Replace(sinAcentos, @"\s+", " ");
+        }
+
+        //private async Task CrearIngresoAutomaticoSiAplica(FacturaEmitida factura)
+        //{
+        //    if (string.IsNullOrWhiteSpace(factura.ItemsJson))
+        //        return;
+
+        //    var items = JsonSerializer.Deserialize<List<FacturaItemDTO>>(
+        //        factura.ItemsJson,
+        //        new JsonSerializerOptions
+        //        {
+        //            PropertyNameCaseInsensitive = true
+        //        }
+        //    );
+
+        //    if (items == null || items.Count == 0)
+        //        return;
+
+        //    var reglas = new Dictionary<string, Func<string, bool>>
+        //    {
+        //        ["Servicio cambio de aceite y filtro"] = d =>
+        //            d.Contains("cambio") &&
+        //            d.Contains("aceite") &&
+        //            d.Contains("filtro"),
+
+        //        ["Mano de obra"] = d =>
+        //            d.Contains("mano") &&
+        //            d.Contains("obra"),
+
+        //        ["Repuestos"] = d =>
+        //            d.Contains("repuesto"),
+
+        //        ["Servicio a terceros"] = d =>
+        //            d.Contains("tercero") ||
+        //            d.Contains("servicio externo")
+        //    };
+
+        //    foreach (var item in items)
+        //    {
+        //        var descripcion = item.Descripcion?.Trim() ?? "";
+
+        //        if (string.IsNullOrWhiteSpace(descripcion))
+        //            continue;
+
+        //        var descLower = descripcion.ToLower();
+
+        //        foreach (var regla in reglas)
+        //        {
+        //            if (!regla.Value(descLower))
+        //                continue;
+
+        //            var nombreCuenta = regla.Key;
+
+        //            var cuentaIngreso = await _context.Ingresos
+        //                .FirstOrDefaultAsync(x =>
+        //                    x.NombreIngreso.ToLower() == nombreCuenta.ToLower()
+        //                );
+
+        //            if (cuentaIngreso == null)
+        //            {
+        //                cuentaIngreso = new Ingreso
+        //                {
+        //                    NombreIngreso = nombreCuenta
+        //                };
+
+        //                _context.Ingresos.Add(cuentaIngreso);
+        //                await _context.SaveChangesAsync();
+        //            }
+
+        //            var importe = item.Cantidad * item.Importe;
+
+        //            var yaExiste = await _context.FichaIngresos.AnyAsync(x =>
+        //                !x.Eliminado &&
+        //                x.NombreIngreso == cuentaIngreso.Id &&
+        //                x.Descripcion != null &&
+        //                x.Descripcion.Contains(factura.NumeroFactura)
+        //            );
+
+        //            if (!yaExiste)
+        //            {
+        //                _context.FichaIngresos.Add(new FichaIngreso
+        //                {
+        //                    NombreIngreso = cuentaIngreso.Id,
+        //                    Fecha = factura.Fecha,
+        //                    Mes = factura.Fecha.ToString("MMMM", new CultureInfo("es-ES")),
+        //                    Descripcion = $"Factura {factura.NumeroFactura} - {factura.Cliente} - {descripcion}",
+        //                    Importe = importe,
+        //                    Eliminado = false,
+        //                    FechaEliminacion = null
+        //                });
+        //            }
+
+        //            if (nombreCuenta == "Servicio cambio de aceite y filtro")
+        //            {
+        //                var yaExisteAlerta = await _context.AlertasClientes.AnyAsync(x =>
+        //                    !x.Eliminado &&
+        //                    !x.Atendida &&
+        //                    x.IdFacturaEmitida == factura.Id
+        //                );
+
+        //                if (!yaExisteAlerta)
+        //                {
+        //                    _context.AlertasClientes.Add(new AlertaCliente
+        //                    {
+        //                        Cliente = factura.Cliente,
+        //                        Telefono = factura.TelefonoCliente,
+        //                        Mensaje = $"Llamar al cliente {factura.Cliente} al móvil {factura.TelefonoCliente} para indicarle que le toca Servicio de cambio de aceite y filtro.",
+        //                        FechaAviso = DateTime.UtcNow,
+        //                        Atendida = false,
+        //                        IdFacturaEmitida = factura.Id,
+        //                        Eliminado = false
+        //                    });
+        //                }
+        //            }
+
+        //            break;
+        //        }
+        //    }
+        //}
 
         [HttpGet("numero/{numeroFactura}")]
         public async Task<ActionResult> GetByNumero(string numeroFactura)

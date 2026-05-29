@@ -33,6 +33,8 @@ public partial class dbContext : DbContext
     public virtual DbSet<NumeradorFactura> NumeradoresFactura { get; set; }
 
     public virtual DbSet<FacturaEmitida> FacturasEmitidas { get; set; }
+    public virtual DbSet<AlertaCliente> AlertasClientes { get; set; }
+
 
     // --- Auditoría automática ---
     public override int SaveChanges()
@@ -494,6 +496,45 @@ public partial class dbContext : DbContext
 
             b.HasIndex(x => x.NumeroFactura).IsUnique();
             b.HasIndex(x => x.IdOrdenTrabajo);
+            b.HasIndex("UsuarioCreacion", "Eliminado");
+        });
+        modelBuilder.Entity<AlertaCliente>(b =>
+        {
+            b.ToTable("AlertaCliente");
+
+            b.HasKey(x => x.Id);
+
+            b.Property(x => x.Cliente)
+                .HasMaxLength(150)
+                .IsUnicode(false)
+                .IsRequired();
+
+            b.Property(x => x.Telefono)
+                .HasMaxLength(30)
+                .IsUnicode(false);
+
+            b.Property(x => x.Mensaje)
+                .HasMaxLength(500)
+                .IsUnicode(false)
+                .IsRequired();
+
+            b.Property(x => x.FechaAviso)
+                .HasColumnType("datetime");
+
+            b.Property(x => x.Atendida)
+                .HasDefaultValue(false);
+
+            b.Property(x => x.Eliminado)
+                .HasDefaultValue(false);
+
+            b.Property<bool>("Activo").HasDefaultValue(true);
+            b.Property<string>("UsuarioCreacion").HasMaxLength(64);
+            b.Property<DateTime>("FechaCreacion");
+            b.Property<string>("UsuarioModificacion").HasMaxLength(64);
+            b.Property<DateTime>("FechaModificacion");
+
+            b.HasIndex(x => x.FechaAviso);
+            b.HasIndex(x => x.Atendida);
             b.HasIndex("UsuarioCreacion", "Eliminado");
         });
 
