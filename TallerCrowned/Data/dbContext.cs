@@ -34,7 +34,7 @@ public partial class dbContext : DbContext
 
     public virtual DbSet<FacturaEmitida> FacturasEmitidas { get; set; }
     public virtual DbSet<AlertaCliente> AlertasClientes { get; set; }
-
+    public virtual DbSet<Presupuesto> Presupuestos { get; set; }
 
     // --- Auditoría automática ---
     public override int SaveChanges()
@@ -535,6 +535,78 @@ public partial class dbContext : DbContext
 
             b.HasIndex(x => x.FechaAviso);
             b.HasIndex(x => x.Atendida);
+            b.HasIndex("UsuarioCreacion", "Eliminado");
+        });
+
+        modelBuilder.Entity<Presupuesto>(b =>
+        {
+            b.ToTable("Presupuesto");
+
+            b.HasKey(x => x.Id);
+
+            b.Property(x => x.NumeroPresupuesto)
+                .HasMaxLength(30)
+                .IsUnicode(false)
+                .IsRequired();
+
+            b.Property(x => x.Cliente)
+                .HasMaxLength(150)
+                .IsUnicode(false)
+                .IsRequired();
+
+            b.Property(x => x.Telefono)
+                .HasMaxLength(30)
+                .IsUnicode(false);
+
+            b.Property(x => x.Matricula)
+                .HasMaxLength(20)
+                .IsUnicode(false)
+                .IsRequired();
+
+            b.Property(x => x.Marca)
+                .HasMaxLength(80)
+                .IsUnicode(false);
+
+            b.Property(x => x.Modelo)
+                .HasMaxLength(80)
+                .IsUnicode(false)
+                .IsRequired();
+
+            b.Property(x => x.Trabajo)
+                .HasMaxLength(1000)
+                .IsUnicode(false)
+                .IsRequired();
+
+            b.Property(x => x.Repuestos)
+                .HasColumnType("decimal(18,2)");
+
+            b.Property(x => x.ManoObra)
+                .HasColumnType("decimal(18,2)");
+
+            b.Property(x => x.Estado)
+                .HasMaxLength(30)
+                .IsUnicode(false)
+                .HasDefaultValue("Pendiente");
+
+            b.Property(x => x.Observaciones)
+                .HasMaxLength(1000)
+                .IsUnicode(false);
+
+            b.Property(x => x.ConvertidoEnOrden)
+                .HasDefaultValue(false);
+
+            b.Property(x => x.Eliminado)
+                .HasDefaultValue(false);
+
+            b.Property<bool>("Activo").HasDefaultValue(true);
+            b.Property<string>("UsuarioCreacion").HasMaxLength(64);
+            b.Property<DateTime>("FechaCreacion");
+            b.Property<string>("UsuarioModificacion").HasMaxLength(64);
+            b.Property<DateTime>("FechaModificacion");
+
+            b.HasIndex(x => x.NumeroPresupuesto).IsUnique();
+            b.HasIndex(x => x.Matricula);
+            b.HasIndex(x => x.Estado);
             b.HasIndex("UsuarioCreacion", "Eliminado");
         });
 
