@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using FamilyApp.Data;
 using FamilyApp.Models;
 using TallerCrowned.Models;
+using System.Data;
 
 namespace TallerCrowned.Controllers
 {
@@ -13,30 +14,40 @@ namespace TallerCrowned.Controllers
     public class NumeradorFacturaController : ControllerBase
     {
         private readonly dbContext _context;
+        private readonly ICurrentUserService _currentUserService;
 
-        public NumeradorFacturaController(dbContext context)
+        public NumeradorFacturaController(dbContext context, ICurrentUserService currentUserService)
         {
             _context = context;
+            _currentUserService = currentUserService;
         }
 
         [HttpPost("siguiente")]
-        public async Task<ActionResult> Siguiente()
+        public async Task<ActionResult> Siguiente([FromQuery] string serie = "A")
         {
             var respuesta = new Respuesta<object>();
 
             try
             {
                 var anio = DateTime.Now.Year;
+                var ownerKey = GetOwnerKey();
+                serie = NormalizeSerie(serie);
 
-                using var transaction = await _context.Database.BeginTransactionAsync();
+                using var transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
 
                 var numerador = await _context.NumeradoresFactura
-                    .FirstOrDefaultAsync(x => x.Anio == anio);
+                    .FirstOrDefaultAsync(x =>
+                        x.OwnerKey == ownerKey &&
+                        x.Serie == serie &&
+                        x.Anio == anio
+                    );
 
                 if (numerador == null)
                 {
                     numerador = new NumeradorFactura
                     {
+                        OwnerKey = ownerKey,
+                        Serie = serie,
                         Anio = anio,
                         UltimoNumero = 0
                     };
@@ -56,7 +67,8 @@ namespace TallerCrowned.Controllers
                 {
                     numero = numerador.UltimoNumero,
                     anio,
-                    numeroFactura = $"{numerador.UltimoNumero}-{anio}"
+                    serie,
+                    numeroFactura = FormatNumeroFactura(serie, ownerKey, numerador.UltimoNumero, anio)
                 });
 
                 return Ok(respuesta);
@@ -70,14 +82,20 @@ namespace TallerCrowned.Controllers
         }
 
         [HttpGet("preview")]
-        public async Task<ActionResult> Preview()
+        public async Task<ActionResult> Preview([FromQuery] string serie = "A")
         {
             var respuesta = new Respuesta<object>();
 
             var anio = DateTime.Now.Year;
+            var ownerKey = GetOwnerKey();
+            serie = NormalizeSerie(serie);
 
             var ultimoNumero = await _context.NumeradoresFactura
-                .Where(x => x.Anio == anio)
+                .Where(x =>
+                    x.OwnerKey == ownerKey &&
+                    x.Serie == serie &&
+                    x.Anio == anio
+                )
                 .Select(x => (int?)x.UltimoNumero)
                 .FirstOrDefaultAsync() ?? 0;
 
@@ -89,10 +107,30 @@ namespace TallerCrowned.Controllers
             {
                 numero = siguiente,
                 anio,
-                numeroFactura = $"{siguiente}-{anio}"
+                serie,
+                numeroFactura = FormatNumeroFactura(serie, ownerKey, siguiente, anio)
             });
 
             return Ok(respuesta);
+        }
+
+        private string GetOwnerKey()
+        {
+            return _currentUserService.UserIdInt?.ToString()
+                ?? _currentUserService.UserIdOrEmail
+                ?? "system";
+        }
+
+        private static string NormalizeSerie(string? serie)
+        {
+            var clean = string.IsNullOrWhiteSpace(serie) ? "A" : serie.Trim().ToUpperInvariant();
+            return clean.Length > 20 ? clean[..20] : clean;
+        }
+
+        private static string FormatNumeroFactura(string serie, string ownerKey, int numero, int anio)
+        {
+            var ownerSegment = ownerKey.Replace(" ", "").ToUpperInvariant();
+            return $"{serie}-{anio}-{ownerSegment}-{numero:D4}";
         }
     }
 }

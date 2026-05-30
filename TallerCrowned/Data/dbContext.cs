@@ -444,13 +444,25 @@ public partial class dbContext : DbContext
 
             b.HasKey(x => x.Id);
 
+            b.Property(x => x.OwnerKey)
+                .HasMaxLength(64)
+                .IsUnicode(false)
+                .HasDefaultValue("legacy")
+                .IsRequired();
+
+            b.Property(x => x.Serie)
+                .HasMaxLength(20)
+                .IsUnicode(false)
+                .HasDefaultValue("A")
+                .IsRequired();
+
             b.Property(x => x.Anio)
                 .IsRequired();
 
             b.Property(x => x.UltimoNumero)
                 .IsRequired();
 
-            b.HasIndex(x => x.Anio)
+            b.HasIndex(x => new { x.OwnerKey, x.Serie, x.Anio })
                 .IsUnique();
         });
 
@@ -617,3 +629,4 @@ public partial class dbContext : DbContext
 
     partial void OnModelCreatingPartial(ModelBuilder modelBuilder);
 }
+

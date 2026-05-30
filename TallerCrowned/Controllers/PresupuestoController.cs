@@ -308,8 +308,15 @@ namespace TallerCrowned.Controllers
                 if (string.IsNullOrWhiteSpace(dto.Estado))
                     return BadRequest(new { message = "El estado es requerido." });
 
+                var uidStr = _currentUserService.UserIdInt?.ToString() ?? "";
+                var isAdmin = User.IsInRole("admin");
+
                 var presupuesto = await _context.Presupuestos
-                    .FirstOrDefaultAsync(x => x.Id == id && !x.Eliminado);
+                    .FirstOrDefaultAsync(x =>
+                        x.Id == id &&
+                        !x.Eliminado &&
+                        (isAdmin || EF.Property<string>(x, "UsuarioCreacion") == uidStr)
+                    );
 
                 if (presupuesto == null)
                 {
@@ -347,8 +354,15 @@ namespace TallerCrowned.Controllers
 
             try
             {
+                var uidStr = _currentUserService.UserIdInt?.ToString() ?? "";
+                var isAdmin = User.IsInRole("admin");
+
                 var presupuesto = await _context.Presupuestos
-                    .FirstOrDefaultAsync(x => x.Id == id && !x.Eliminado);
+                    .FirstOrDefaultAsync(x =>
+                        x.Id == id &&
+                        !x.Eliminado &&
+                        (isAdmin || EF.Property<string>(x, "UsuarioCreacion") == uidStr)
+                    );
 
                 if (presupuesto == null)
                 {
@@ -415,8 +429,15 @@ namespace TallerCrowned.Controllers
 
             try
             {
+                var uidStr = _currentUserService.UserIdInt?.ToString() ?? "";
+                var isAdmin = User.IsInRole("admin");
+
                 var presupuesto = await _context.Presupuestos
-                    .FirstOrDefaultAsync(x => x.Id == id && !x.Eliminado);
+                    .FirstOrDefaultAsync(x =>
+                        x.Id == id &&
+                        !x.Eliminado &&
+                        (isAdmin || EF.Property<string>(x, "UsuarioCreacion") == uidStr)
+                    );
 
                 if (presupuesto == null)
                 {

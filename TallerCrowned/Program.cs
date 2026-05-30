@@ -1,4 +1,4 @@
-using FamilyApp.Data;
+ï»¿using FamilyApp.Data;
 using FamilyApp.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -11,7 +11,7 @@ using System.Text;
 var builder = WebApplication.CreateBuilder(args);
 
 // ========= 1) SERVICES (ANTES del Build) =========
-var env = builder.Environment; // <- úsalo en AddJwtBearer
+var env = builder.Environment; // <- Ãºsalo en AddJwtBearer
 
 builder.Services.AddControllers();
 
@@ -89,19 +89,21 @@ builder.Services
             {
                 if (string.IsNullOrEmpty(ctx.Token))
                 {
-                    var cookieToken = ctx.HttpContext.Request.Cookies[".familyapp.auth"];
+                    var cookieToken = ctx.HttpContext.Request.Cookies[".tallercrowned.auth"];
+                    if (string.IsNullOrEmpty(cookieToken))
+                        cookieToken = ctx.HttpContext.Request.Cookies[".familyapp.auth"];
                     if (!string.IsNullOrEmpty(cookieToken)) ctx.Token = cookieToken;
                 }
                 return Task.CompletedTask;
             },
             OnTokenValidated = async ctx =>
             {
-                // BYPASS de validación JTI en DEV
+                // BYPASS de validaciÃ³n JTI en DEV
                 var webEnv = ctx.HttpContext.RequestServices
                                    .GetRequiredService<IWebHostEnvironment>();
                 if (webEnv.IsDevelopment()) return;
 
-                // (tu validación real contra DB aquí si quieres sesión única)
+                // (tu validaciÃ³n real contra DB aquÃ­ si quieres sesiÃ³n Ãºnica)
                 try
                 {
                     var db = ctx.HttpContext.RequestServices.GetRequiredService<dbContext>();
@@ -110,15 +112,15 @@ builder.Services
                     var jti = principal.FindFirstValue("jti");
 
                     if (string.IsNullOrEmpty(sub) || string.IsNullOrEmpty(jti) || !int.TryParse(sub, out var userId))
-                    { ctx.Fail("Token inválido."); return; }
+                    { ctx.Fail("Token invÃ¡lido."); return; }
 
                     var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId);
                     if (user == null || user.ActiveSessionJti == null
                         || user.ActiveSessionJti.ToString() != jti
                         || (user.ActiveSessionExpiresAt.HasValue && user.ActiveSessionExpiresAt < DateTime.UtcNow))
-                    { ctx.Fail("Sesión no válida o caducada."); return; }
+                    { ctx.Fail("SesiÃ³n no vÃ¡lida o caducada."); return; }
                 }
-                catch { ctx.Fail("Error validando la sesión."); }
+                catch { ctx.Fail("Error validando la sesiÃ³n."); }
             }
         };
     });
@@ -154,13 +156,8 @@ builder.Services.AddSwaggerGen(c =>
 // ========= 2) BUILD =========
 var app = builder.Build();
 
-// ========= 3) MIDDLEWARE (DESPUÉS del Build) =========
+// ========= 3) MIDDLEWARE (DESPUÃ‰S del Build) =========
 if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
-else
 {
     app.UseSwagger();
     app.UseSwaggerUI();
@@ -178,3 +175,4 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+

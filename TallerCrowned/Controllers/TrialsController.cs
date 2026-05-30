@@ -38,7 +38,7 @@ public class TrialsController : ControllerBase
             _cfg["App:FrontendBaseUrl"] ??
             _cfg["App:AppBaseUrl"] ??
             $"{Request.Scheme}://{Request.Host.Value}" ??
-            "https://www.familyapp.store";
+            "https://www.tallercrowned.store";
 
         var landingBase =
                 _cfg["App:LandingBaseUrl"] ??
@@ -50,14 +50,14 @@ public class TrialsController : ControllerBase
         var magicLink = $"{appBase}/trial?token={Uri.EscapeDataString(signed)}&email={Uri.EscapeDataString(email)}";
 
         // 2) emails
-        var support = _cfg["Support:Email"] ?? "soporte@familyapp.store";
+        var support = _cfg["Support:Email"] ?? "soporte@tallercrowned.store";
         await _mailer.SendAsync(support, "Nueva solicitud de prueba 24 h",
             $"<p>Email: {System.Net.WebUtility.HtmlEncode(email)}</p><p>Exp: {expires:u}</p>");
 
-        await _mailer.SendAsync(email, "Tu acceso de prueba (24 h) – FamilyApp", $@"
+        await _mailer.SendAsync(email, "Tu acceso de prueba (24 h) - TallerCrowned", $@"
             <p>Hola,</p>
             <p>Usa este enlace para entrar sin registrarte (caduca en {hours} h):</p>
-            <p><a href=""{System.Net.WebUtility.HtmlEncode(magicLink)}"">Abrir FamilyApp</a></p>
+            <p><a href=""{System.Net.WebUtility.HtmlEncode(magicLink)}"">Abrir TallerCrowned</a></p>
             <p>Si no funciona, copia y pega:<br/>{System.Net.WebUtility.HtmlEncode(magicLink)}</p>
         ");
 

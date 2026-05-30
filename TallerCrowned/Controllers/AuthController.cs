@@ -132,12 +132,12 @@ public class AuthController : ControllerBase
         {
             cookieOptions.SameSite = SameSiteMode.None;
             cookieOptions.Secure = true;
-            cookieOptions.Domain = ".familyapp.store";
+            cookieOptions.Domain = ".tallercrowned.store";
         }
 
         //if (isProd) cookieOptions.Domain = ".familyapp.store";
 
-        Response.Cookies.Append(".familyapp.auth", token, cookieOptions);
+        Response.Cookies.Append(".tallercrowned.auth", token, cookieOptions);
 
         return Ok(new { token, expiresAt, user = new { user.Id, user.Email, user.Role } });
     }
@@ -171,8 +171,9 @@ public class AuthController : ControllerBase
             Secure = true,
             SameSite = SameSiteMode.None
         };
-        if (isProd) cookieOptions.Domain = ".familyapp.store";
+        if (isProd) cookieOptions.Domain = ".tallercrowned.store";
 
+        Response.Cookies.Delete(".tallercrowned.auth", cookieOptions);
         Response.Cookies.Delete(".familyapp.auth", cookieOptions);
         return Ok(new { message = "Sesión cerrada." });
     }
@@ -274,8 +275,8 @@ public class AuthController : ControllerBase
         await _db.SaveChangesAsync();
 
         // 2) URL del front desde config (usa SIEMPRE config, nunca Request.Host)
-        //    NOTA: Asegúrate de definir App:FrontendBaseUrl = https://www.familyapp.store
-        var frontBase = _cfg["App:FrontendBaseUrl"] ?? "https://www.familyapp.store";
+        //    NOTA: define App:FrontendBaseUrl = https://www.tallercrowned.store
+        var frontBase = _cfg["App:FrontendBaseUrl"] ?? "https://www.tallercrowned.store";
         var link = $"{frontBase}/reset-password?token={Uri.EscapeDataString(token)}&email={Uri.EscapeDataString(email)}";
 
         // 3) Nombre visible (fallback al email) + encode seguro
@@ -289,7 +290,7 @@ public class AuthController : ControllerBase
         <p>Si no funciona, copia y pega esta URL en tu navegador:<br/>{H(link)}</p>
         <p>El enlace caduca en 30 minutos. Si no lo solicitaste, ignora este correo.</p>";
 
-        await _mailer.SendAsync(user.Email, "Restablecer contraseña - FamilyApp", html);
+        await _mailer.SendAsync(user.Email, "Restablecer contraseña - TallerCrowned", html);
 
         if (_env.IsDevelopment())
             return Ok(new { message = "Email enviado (DEV).", devToken = token, devLink = link });

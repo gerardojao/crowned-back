@@ -73,8 +73,15 @@ namespace TallerCrowned.Controllers
 
             try
             {
+                var uidStr = _currentUserService.UserIdInt?.ToString() ?? "";
+                var isAdmin = User.IsInRole("admin");
+
                 var alerta = await _context.AlertasClientes
-                    .FirstOrDefaultAsync(x => x.Id == id && !x.Eliminado);
+                    .FirstOrDefaultAsync(x =>
+                        x.Id == id &&
+                        !x.Eliminado &&
+                        (isAdmin || EF.Property<string>(x, "UsuarioCreacion") == uidStr)
+                    );
 
                 if (alerta == null)
                 {

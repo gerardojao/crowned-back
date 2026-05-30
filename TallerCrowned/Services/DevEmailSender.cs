@@ -18,7 +18,7 @@ namespace FamilyApp.Services
             var user = _cfg["Smtp:User"] ?? "resend";
             var pass = _cfg["Smtp:Pass"];
             var from = _cfg["Smtp:From"] ?? "no-reply@familyapp.store";
-            var display = string.IsNullOrWhiteSpace(fromName) ? "FamilyApp" : fromName;
+            var display = string.IsNullOrWhiteSpace(fromName) ? "TallerCrowned" : fromName;
 
             using var client = new SmtpClient(host, port)
             {

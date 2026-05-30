@@ -25,7 +25,7 @@ public static class EmailTemplates
 <div style='font-family:ui-sans-serif,system-ui;'>
   <h2>Acceso activado</h2>
   <p>Hola {H(email)},</p>
-  <p>Tu acceso a <b>FamilyApp</b> ya está activo. ¡Disfruta!</p>
-  <p><a href='https://familyapp.store/login' style='background:#065f46;color:#fff;padding:10px 14px;border-radius:10px;text-decoration:none'>Entrar a FamilyApp</a></p>
+  <p>Tu acceso a <b>TallerCrowned</b> ya está activo. ¡Disfruta!</p>
+  <p><a href='https://tallercrowned.store/login' style='background:#065f46;color:#fff;padding:10px 14px;border-radius:10px;text-decoration:none'>Entrar a TallerCrowned</a></p>
 </div>";
 }

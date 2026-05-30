@@ -392,8 +392,15 @@ namespace TallerCrowned.Controllers
         {
             var respuesta = new Respuesta<object>();
 
+            var uidStr = _currentUserService.UserIdInt?.ToString() ?? "";
+            var isAdmin = User.IsInRole("admin");
+
             var orden = await _context.OrdenesTrabajo
-                .FirstOrDefaultAsync(x => x.Id == id && !x.Eliminado);
+                .FirstOrDefaultAsync(x =>
+                    x.Id == id &&
+                    !x.Eliminado &&
+                    (isAdmin || EF.Property<string>(x, "UsuarioCreacion") == uidStr)
+                );
 
             if (orden == null)
             {
@@ -458,3 +465,4 @@ namespace TallerCrowned.Controllers
 
 
 }
+
