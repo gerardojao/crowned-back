@@ -3,11 +3,13 @@ using FamilyApp.DTOs.Egresos;
 using FamilyApp.DTOs.Ingresos;
 using FamilyApp.Models;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace FamilyApp.Controllers
 {
+    [Authorize]
     [Route("api/[controller]")]
     [ApiController]
     public class EgresoController : ControllerBase
@@ -15,12 +17,18 @@ namespace FamilyApp.Controllers
         private readonly IRepository _repository;//private readonly IMapper _mapper;
         private readonly dbContext _context;
         private readonly ICurrentUserService _currentUserService;
+        private readonly ICurrentWorkshopService _currentWorkshopService;
 
-        public EgresoController(IRepository repository, dbContext context, ICurrentUserService currentUserService)
+        public EgresoController(
+            IRepository repository,
+            dbContext context,
+            ICurrentUserService currentUserService,
+            ICurrentWorkshopService currentWorkshopService)
         {
             _repository = repository;
             _context = context;
             _currentUserService = currentUserService;
+            _currentWorkshopService = currentWorkshopService;
         }
 
         //Egresos
@@ -30,7 +38,13 @@ namespace FamilyApp.Controllers
             Respuesta<object> respuesta = new();
             try
             {
-                var egresos = await _repository.SelectAll<Egreso>();
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
+
+                var egresos = await _context.Egresos
+                    .AsNoTracking()
+                    .Where(x => EF.Property<int>(x, "WorkshopId") == workshopId.Value)
+                    .ToListAsync();
                 if (egresos != null)
                 {
                     foreach (var item in egresos)
@@ -67,12 +81,13 @@ namespace FamilyApp.Controllers
             var respuesta = new Respuesta<object>();
             try
             {
-                var uidStr = _currentUserService.UserIdInt?.ToString() ?? "";
-                var isAdmin = User.IsInRole("admin");
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
+
                 var ingre = await (from _Egreso in _context.Egresos
                                    join _fEgreso in _context.FichaEgresos on _Egreso.Id equals _fEgreso.NombreEgreso
                                    where !_fEgreso.Eliminado &&
-                                   (isAdmin || EF.Property<string>(_fEgreso, "UsuarioCreacion") == uidStr)                          // <- filtro
+                                   EF.Property<int>(_fEgreso, "WorkshopId") == workshopId.Value
                                    select new { _Egreso.Nombre, _fEgreso.Importe })
                                   .OrderByDescending(x => x.Importe)
                                   .ToListAsync();
@@ -264,19 +279,18 @@ namespace FamilyApp.Controllers
             var respuesta = new Respuesta<object>();
             try
             {
-                var uidStr = _currentUserService.UserIdInt?.ToString() ?? "";
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
                 
                 if (fechaInicio.HasValue && fechaFin.HasValue && fechaFin < fechaInicio)
                     return BadRequest(new { message = "La fecha fin no puede ser menor que la fecha inicio." });
 
                 var fi = fechaInicio?.Date;
                 var ffExcl = fechaFin?.Date.AddDays(1);
-                var isAdmin = User.IsInRole("admin");
-
                 var detalles = await _context.FichaEgresos
                     .AsNoTracking()
                     .Where(f => !f.Eliminado
-                        && (isAdmin || EF.Property<string>(f, "UsuarioCreacion") == uidStr)
+                        && EF.Property<int>(f, "WorkshopId") == workshopId.Value
                         && (!fi.HasValue || f.Fecha >= fi)
                         && (!ffExcl.HasValue || f.Fecha < ffExcl)
                         && (!tipoId.HasValue || f.NombreEgreso == tipoId.Value))
@@ -321,12 +335,16 @@ namespace FamilyApp.Controllers
             var respuesta = new Respuesta<object>();
             try
             {
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
+
                 var fi = fechaInicio.Date;
                 var ffExcl = fechaFin.Date.AddDays(1);
 
                 var egreT = await (from e in _context.Egresos.AsNoTracking()
                                    join f in _context.FichaEgresos.AsNoTracking() on e.Id equals f.NombreEgreso
                                    where !f.Eliminado
+                                      && EF.Property<int>(f, "WorkshopId") == workshopId.Value
                                       && f.Fecha.HasValue
                                       && f.Fecha.Value >= fi
                                       && f.Fecha.Value < ffExcl
@@ -356,8 +374,12 @@ namespace FamilyApp.Controllers
             Respuesta<object> respuesta = new();
             try
             {
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
 
-                await _repository.CreateAsync(egreso);
+                _context.Egresos.Add(egreso);
+                _context.Entry(egreso).Property("WorkshopId").CurrentValue = workshopId.Value;
+                await _context.SaveChangesAsync();
                 respuesta.Ok = 1;
                 respuesta.Message = "Egreso registrado satisfactoriamente";
 
@@ -379,8 +401,13 @@ namespace FamilyApp.Controllers
 
             try
             {
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
+
                 var egreso = await _context.Egresos
-                    .FirstOrDefaultAsync(x => x.Id == id);
+                    .FirstOrDefaultAsync(x =>
+                        x.Id == id &&
+                        EF.Property<int>(x, "WorkshopId") == workshopId.Value);
 
                 if (egreso == null)
                 {
@@ -421,8 +448,13 @@ namespace FamilyApp.Controllers
 
             try
             {
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
+
                 var egreso = await _context.Egresos
-                    .FirstOrDefaultAsync(x => x.Id == id);
+                    .FirstOrDefaultAsync(x =>
+                        x.Id == id &&
+                        EF.Property<int>(x, "WorkshopId") == workshopId.Value);
 
                 if (egreso == null)
                 {
@@ -432,7 +464,10 @@ namespace FamilyApp.Controllers
                 }
 
                 var tieneMovimientos = await _context.FichaEgresos
-                    .AnyAsync(x => x.NombreEgreso == id && !x.Eliminado);
+                    .AnyAsync(x =>
+                        x.NombreEgreso == id &&
+                        !x.Eliminado &&
+                        EF.Property<int>(x, "WorkshopId") == workshopId.Value);
 
                 if (tieneMovimientos)
                 {

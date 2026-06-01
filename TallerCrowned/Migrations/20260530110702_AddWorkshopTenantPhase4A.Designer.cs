@@ -4,6 +4,7 @@ using FamilyApp.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace FamilyApp.Migrations
 {
     [DbContext(typeof(dbContext))]
-    partial class dbContextModelSnapshot : ModelSnapshot
+    [Migration("20260530110702_AddWorkshopTenantPhase4A")]
+    partial class AddWorkshopTenantPhase4A
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -647,10 +650,10 @@ namespace FamilyApp.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("OwnerKey", "Serie", "Anio");
-
-                    b.HasIndex("WorkshopId", "Serie", "Anio")
+                    b.HasIndex("OwnerKey", "Serie", "Anio")
                         .IsUnique();
+
+                    b.HasIndex("WorkshopId", "Serie", "Anio");
 
                     b.ToTable("NumeradorFactura", (string)null);
                 });
@@ -881,10 +884,10 @@ namespace FamilyApp.Migrations
 
                     b.HasIndex("Matricula");
 
-                    b.HasIndex("WorkshopId");
-
-                    b.HasIndex("WorkshopId", "NumeroPresupuesto")
+                    b.HasIndex("NumeroPresupuesto")
                         .IsUnique();
+
+                    b.HasIndex("WorkshopId");
 
                     b.HasIndex("UsuarioCreacion", "Eliminado");
 

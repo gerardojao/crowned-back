@@ -19,11 +19,16 @@ namespace TallerCrowned.Controllers
     {
         private readonly dbContext _context;
         private readonly ICurrentUserService _currentUserService;
+        private readonly ICurrentWorkshopService _currentWorkshopService;
 
-        public FacturaEmitidaController(dbContext context, ICurrentUserService currentUserService)
+        public FacturaEmitidaController(
+            dbContext context,
+            ICurrentUserService currentUserService,
+            ICurrentWorkshopService currentWorkshopService)
         {
             _context = context;
             _currentUserService = currentUserService;
+            _currentWorkshopService = currentWorkshopService;
         }
 
         [HttpPost]
@@ -65,8 +70,8 @@ namespace TallerCrowned.Controllers
                 if (string.IsNullOrWhiteSpace(dto.Cliente))
                     return BadRequest(new { message = "El cliente es requerido." });
 
-                var uidStr = _currentUserService.UserIdInt?.ToString() ?? "";
-                var isAdmin = User.IsInRole("admin");
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
                 var ownerKey = GetOwnerKey();
                 var serie = NormalizeSerie(dto.Serie);
                 var anio = DateTime.Now.Year;
@@ -74,14 +79,14 @@ namespace TallerCrowned.Controllers
                 var items = NormalizeItems(dto.Items, dto.ItemsJson);
 
                 if (items.Count == 0)
-                    return BadRequest(new { message = "La factura debe tener al menos una linea." });
+                    return BadRequest(new { message = "La factura debe tener al menos una linea con importe mayor que 0." });
 
                 if (dto.IdOrdenTrabajo.HasValue)
                 {
                     var ordenExiste = await _context.OrdenesTrabajo.AnyAsync(x =>
                         x.Id == dto.IdOrdenTrabajo.Value &&
                         !x.Eliminado &&
-                        (isAdmin || EF.Property<string>(x, "UsuarioCreacion") == uidStr)
+                        EF.Property<int>(x, "WorkshopId") == workshopId.Value
                     );
 
                     if (!ordenExiste)
@@ -92,12 +97,12 @@ namespace TallerCrowned.Controllers
 
                 var numeroFactura = allowProvidedNumber && !string.IsNullOrWhiteSpace(dto.NumeroFactura)
                     ? dto.NumeroFactura.Trim()
-                    : await GenerateNumeroFactura(ownerKey, serie, anio);
+                    : await GenerateNumeroFactura(workshopId.Value, ownerKey, serie, anio);
 
                 var existe = await _context.FacturasEmitidas.AnyAsync(x =>
                     x.NumeroFactura == numeroFactura &&
                     !x.Eliminado &&
-                    (isAdmin || EF.Property<string>(x, "UsuarioCreacion") == uidStr)
+                    EF.Property<int>(x, "WorkshopId") == workshopId.Value
                 );
 
                 if (existe)
@@ -134,16 +139,17 @@ namespace TallerCrowned.Controllers
                 };
 
                 _context.FacturasEmitidas.Add(factura);
+                _context.Entry(factura).Property("WorkshopId").CurrentValue = workshopId.Value;
                 await _context.SaveChangesAsync();
 
-                await CrearIngresoAutomaticoSiAplica(factura, items);
+                await CrearIngresoAutomaticoSiAplica(factura, items, workshopId.Value);
 
                 if (factura.IdOrdenTrabajo.HasValue)
                 {
                     var orden = await _context.OrdenesTrabajo.FirstOrDefaultAsync(x =>
                         x.Id == factura.IdOrdenTrabajo.Value &&
                         !x.Eliminado &&
-                        (isAdmin || EF.Property<string>(x, "UsuarioCreacion") == uidStr)
+                        EF.Property<int>(x, "WorkshopId") == workshopId.Value
                     );
 
                     if (orden != null)
@@ -177,10 +183,10 @@ namespace TallerCrowned.Controllers
             }
         }
 
-        private async Task<string> GenerateNumeroFactura(string ownerKey, string serie, int anio)
+        private async Task<string> GenerateNumeroFactura(int workshopId, string ownerKey, string serie, int anio)
         {
             var numerador = await _context.NumeradoresFactura.FirstOrDefaultAsync(x =>
-                x.OwnerKey == ownerKey &&
+                x.WorkshopId == workshopId &&
                 x.Serie == serie &&
                 x.Anio == anio
             );
@@ -189,6 +195,7 @@ namespace TallerCrowned.Controllers
             {
                 numerador = new NumeradorFactura
                 {
+                    WorkshopId = workshopId,
                     OwnerKey = ownerKey,
                     Serie = serie,
                     Anio = anio,
@@ -202,10 +209,10 @@ namespace TallerCrowned.Controllers
             numerador.UltimoNumero += 1;
             await _context.SaveChangesAsync();
 
-            return FormatNumeroFactura(serie, ownerKey, numerador.UltimoNumero, anio);
+            return FormatNumeroFactura(serie, workshopId, numerador.UltimoNumero, anio);
         }
 
-        private async Task CrearIngresoAutomaticoSiAplica(FacturaEmitida factura, List<FacturaItemDTO> items)
+        private async Task CrearIngresoAutomaticoSiAplica(FacturaEmitida factura, List<FacturaItemDTO> items, int workshopId)
         {
             if (items.Count == 0)
                 return;
@@ -224,7 +231,7 @@ namespace TallerCrowned.Controllers
                 ["Repuestos"] = d =>
                     d.Contains("repuesto"),
 
-                ["Servicio a terceros"] = d =>
+                ["Servicios a terceros"] = d =>
                     d.Contains("tercero") ||
                     d.Contains("servicio externo")
             };
@@ -240,54 +247,59 @@ namespace TallerCrowned.Controllers
 
                 string descLower = NormalizarTexto(descripcionOriginal);
 
-                foreach (var regla in reglas)
-                {
-                    if (!regla.Value(descLower))
-                        continue;
+                var nombreCuenta = reglas
+                    .FirstOrDefault(regla => regla.Value(descLower))
+                    .Key;
 
-                    var nombreCuenta = regla.Key;
+                if (string.IsNullOrWhiteSpace(nombreCuenta))
+                    nombreCuenta = "Ventas";
 
-                    if (nombreCuenta == "Servicio cambio de aceite y filtro")
-                        debeCrearAlertaAceite = true;
+                if (nombreCuenta == "Servicio cambio de aceite y filtro")
+                    debeCrearAlertaAceite = true;
 
-                    var cuentaIngreso = await _context.Ingresos
-                        .FirstOrDefaultAsync(x => x.NombreIngreso.ToLower() == nombreCuenta.ToLower());
-
-                    if (cuentaIngreso == null)
-                    {
-                        cuentaIngreso = new Ingreso
-                        {
-                            NombreIngreso = nombreCuenta
-                        };
-
-                        _context.Ingresos.Add(cuentaIngreso);
-                        await _context.SaveChangesAsync();
-                    }
-
-                    var importe = Round2(item.Cantidad * item.Importe);
-
-                    var yaExisteIngreso = await _context.FichaIngresos.AnyAsync(x =>
-                        !x.Eliminado &&
-                        x.NombreIngreso == cuentaIngreso.Id &&
-                        x.Descripcion != null &&
-                        x.Descripcion.Contains(factura.NumeroFactura)
+                var cuentaIngreso = await _context.Ingresos
+                    .FirstOrDefaultAsync(x =>
+                        x.NombreIngreso.ToLower() == nombreCuenta.ToLower() &&
+                        EF.Property<int>(x, "WorkshopId") == workshopId
                     );
 
-                    if (!yaExisteIngreso)
+                if (cuentaIngreso == null)
+                {
+                    cuentaIngreso = new Ingreso
                     {
-                        _context.FichaIngresos.Add(new FichaIngreso
-                        {
-                            NombreIngreso = cuentaIngreso.Id,
-                            Fecha = factura.Fecha,
-                            Mes = factura.Fecha.ToString("MMMM", new CultureInfo("es-ES")),
-                            Descripcion = $"Factura {factura.NumeroFactura} - {factura.Cliente} - {descripcionOriginal}",
-                            Importe = importe,
-                            Eliminado = false,
-                            FechaEliminacion = null
-                        });
-                    }
+                        NombreIngreso = nombreCuenta
+                    };
 
-                    break;
+                    _context.Ingresos.Add(cuentaIngreso);
+                    _context.Entry(cuentaIngreso).Property("WorkshopId").CurrentValue = workshopId;
+                    await _context.SaveChangesAsync();
+                }
+
+                var importe = Round2(item.Cantidad * item.Importe);
+
+                var yaExisteIngreso = await _context.FichaIngresos.AnyAsync(x =>
+                    !x.Eliminado &&
+                    x.NombreIngreso == cuentaIngreso.Id &&
+                    EF.Property<int>(x, "WorkshopId") == workshopId &&
+                    x.Descripcion != null &&
+                    x.Descripcion.Contains(factura.NumeroFactura)
+                );
+
+                if (!yaExisteIngreso)
+                {
+                    var fichaIngreso = new FichaIngreso
+                    {
+                        NombreIngreso = cuentaIngreso.Id,
+                        Fecha = factura.Fecha,
+                        Mes = factura.Fecha.ToString("MMMM", new CultureInfo("es-ES")),
+                        Descripcion = $"Factura {factura.NumeroFactura} - {factura.Cliente} - {descripcionOriginal}",
+                        Importe = importe,
+                        Eliminado = false,
+                        FechaEliminacion = null
+                    };
+
+                    _context.FichaIngresos.Add(fichaIngreso);
+                    _context.Entry(fichaIngreso).Property("WorkshopId").CurrentValue = workshopId;
                 }
             }
 
@@ -300,7 +312,7 @@ namespace TallerCrowned.Controllers
 
                 if (!yaExisteAlerta)
                 {
-                    _context.AlertasClientes.Add(new AlertaCliente
+                    var alerta = new AlertaCliente
                     {
                         Cliente = factura.Cliente,
                         Telefono = factura.TelefonoCliente,
@@ -309,7 +321,10 @@ namespace TallerCrowned.Controllers
                         Atendida = false,
                         IdFacturaEmitida = factura.Id,
                         Eliminado = false
-                    });
+                    };
+
+                    _context.AlertasClientes.Add(alerta);
+                    _context.Entry(alerta).Property("WorkshopId").CurrentValue = workshopId;
                 }
             }
         }
@@ -326,7 +341,7 @@ namespace TallerCrowned.Controllers
                     Cantidad = x.Cantidad <= 0 ? 1 : Round2(x.Cantidad),
                     Importe = Round2(x.Importe)
                 })
-                .Where(x => x.Importe >= 0)
+                .Where(x => Round2(x.Cantidad * x.Importe) > 0)
                 .ToList();
         }
 
@@ -371,15 +386,15 @@ namespace TallerCrowned.Controllers
 
             try
             {
-                var uidStr = _currentUserService.UserIdInt?.ToString() ?? "";
-                var isAdmin = User.IsInRole("admin");
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
 
                 var factura = await _context.FacturasEmitidas
                     .AsNoTracking()
                     .FirstOrDefaultAsync(x =>
                         x.NumeroFactura == numeroFactura &&
                         !x.Eliminado &&
-                        (isAdmin || EF.Property<string>(x, "UsuarioCreacion") == uidStr)
+                        EF.Property<int>(x, "WorkshopId") == workshopId.Value
                     );
 
                 if (factura == null)
@@ -410,15 +425,15 @@ namespace TallerCrowned.Controllers
 
             try
             {
-                var uidStr = _currentUserService.UserIdInt?.ToString() ?? "";
-                var isAdmin = User.IsInRole("admin");
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
 
                 var factura = await _context.FacturasEmitidas
                     .AsNoTracking()
                     .Where(x =>
                         x.IdOrdenTrabajo == idOrden &&
                         !x.Eliminado &&
-                        (isAdmin || EF.Property<string>(x, "UsuarioCreacion") == uidStr)
+                        EF.Property<int>(x, "WorkshopId") == workshopId.Value
                     )
                     .OrderByDescending(x => x.Fecha)
                     .FirstOrDefaultAsync();
@@ -457,10 +472,9 @@ namespace TallerCrowned.Controllers
             return clean.Length > 20 ? clean[..20] : clean;
         }
 
-        private static string FormatNumeroFactura(string serie, string ownerKey, int numero, int anio)
+        private static string FormatNumeroFactura(string serie, int workshopId, int numero, int anio)
         {
-            var ownerSegment = ownerKey.Replace(" ", "").ToUpperInvariant();
-            return $"{serie}-{anio}-{ownerSegment}-{numero:D4}";
+            return $"{serie}-{anio}-T{workshopId}-{numero:D4}";
         }
 
         private static decimal Round2(decimal value)

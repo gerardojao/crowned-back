@@ -35,6 +35,9 @@ public partial class dbContext : DbContext
     public virtual DbSet<FacturaEmitida> FacturasEmitidas { get; set; }
     public virtual DbSet<AlertaCliente> AlertasClientes { get; set; }
     public virtual DbSet<Presupuesto> Presupuestos { get; set; }
+    public virtual DbSet<ServicioFrecuente> ServiciosFrecuentes { get; set; }
+    public virtual DbSet<Workshop> Workshops { get; set; }
+    public virtual DbSet<WorkshopUser> WorkshopUsers { get; set; }
 
     // --- Auditoría automática ---
     public override int SaveChanges()
@@ -128,10 +131,108 @@ public partial class dbContext : DbContext
             entity.Property(u => u.Role).IsUnicode(false);
         });
 
+        modelBuilder.Entity<Workshop>(b =>
+        {
+            b.ToTable("Workshop");
+
+            b.HasKey(x => x.Id);
+
+            b.Property(x => x.Nombre)
+                .HasMaxLength(150)
+                .IsUnicode(false)
+                .IsRequired();
+
+            b.Property(x => x.RazonSocial)
+                .HasMaxLength(180)
+                .IsUnicode(false)
+                .IsRequired();
+
+            b.Property(x => x.Nif)
+                .HasMaxLength(30)
+                .IsUnicode(false)
+                .IsRequired();
+
+            b.Property(x => x.Direccion)
+                .HasMaxLength(250)
+                .IsUnicode(false)
+                .IsRequired();
+
+            b.Property(x => x.Telefono)
+                .HasMaxLength(50)
+                .IsUnicode(false);
+
+            b.Property(x => x.Email)
+                .HasMaxLength(150)
+                .IsUnicode(false);
+
+            b.Property(x => x.Iban)
+                .HasMaxLength(50)
+                .IsUnicode(false);
+
+            b.Property(x => x.SerieFactura)
+                .HasMaxLength(20)
+                .IsUnicode(false)
+                .HasDefaultValue("A")
+                .IsRequired();
+
+            b.Property(x => x.LogoPath)
+                .HasMaxLength(300)
+                .IsUnicode(false);
+
+            b.Property(x => x.MaxUsers)
+                .HasDefaultValue(3)
+                .IsRequired();
+
+            b.Property(x => x.FooterText)
+                .HasMaxLength(300);
+
+            b.Property(x => x.PrivacyPolicyText)
+                .HasColumnType("nvarchar(max)");
+
+            b.Property(x => x.TermsText)
+                .HasColumnType("nvarchar(max)");
+
+            b.Property(x => x.Activo).HasDefaultValue(true);
+            b.Property(x => x.FechaCreacion).HasColumnType("datetime");
+
+            b.HasIndex(x => x.Nif);
+            b.HasIndex(x => x.Activo);
+        });
+
+        modelBuilder.Entity<WorkshopUser>(b =>
+        {
+            b.ToTable("WorkshopUser");
+
+            b.HasKey(x => x.Id);
+
+            b.Property(x => x.Role)
+                .HasMaxLength(50)
+                .IsUnicode(false)
+                .HasDefaultValue("owner")
+                .IsRequired();
+
+            b.Property(x => x.Activo).HasDefaultValue(true);
+            b.Property(x => x.FechaCreacion).HasColumnType("datetime");
+
+            b.HasOne(x => x.Workshop)
+                .WithMany()
+                .HasForeignKey(x => x.WorkshopId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            b.HasOne<AppUser>()
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            b.HasIndex(x => new { x.WorkshopId, x.UserId }).IsUnique();
+            b.HasIndex(x => new { x.UserId, x.Activo });
+        });
+
         // Egreso catálogo
         modelBuilder.Entity<Egreso>(entity =>
         {
             entity.Property(e => e.Nombre).HasMaxLength(100).IsUnicode(false);
+            ConfigureWorkshopShadow<Egreso>(entity);
         });
 
         // Ingreso catálogo
@@ -139,6 +240,7 @@ public partial class dbContext : DbContext
         {
             entity.ToTable("Ingreso");
             entity.Property(e => e.NombreIngreso).HasMaxLength(100).IsUnicode(false);
+            ConfigureWorkshopShadow<Ingreso>(entity);
         });
 
         // ---------- FichaEgreso ----------
@@ -162,6 +264,7 @@ public partial class dbContext : DbContext
             b.Property<DateTime>("FechaModificacion");
 
             // dueño (sombra)
+            ConfigureWorkshopShadow<FichaEgreso>(b);
             b.HasIndex("UsuarioCreacion", "Eliminado", "Fecha");
         });
 
@@ -186,6 +289,7 @@ public partial class dbContext : DbContext
             b.Property<DateTime>("FechaModificacion");
 
             // dueño (sombra)
+            ConfigureWorkshopShadow<FichaIngreso>(b);
             b.HasIndex("UsuarioCreacion", "Eliminado", "Fecha");
         });
 
@@ -258,6 +362,7 @@ public partial class dbContext : DbContext
             b.Property<string>("UsuarioModificacion").HasMaxLength(64);
             b.Property<DateTime>("FechaModificacion");
 
+            ConfigureWorkshopShadow<OrdenTrabajo>(b);
             b.HasIndex("UsuarioCreacion", "Eliminado", "Fecha");
             b.HasIndex(e => e.Matricula);
         });
@@ -315,6 +420,7 @@ public partial class dbContext : DbContext
             b.Property<string>("UsuarioModificacion").HasMaxLength(64);
             b.Property<DateTime>("FechaModificacion");
 
+            ConfigureWorkshopShadow<Cliente>(b);
             b.HasIndex(e => e.Matricula);
             b.HasIndex(e => e.Telefono);
             b.HasIndex("UsuarioCreacion", "Eliminado");
@@ -373,6 +479,7 @@ public partial class dbContext : DbContext
             b.Property<string>("UsuarioModificacion").HasMaxLength(64);
             b.Property<DateTime>("FechaModificacion");
 
+            ConfigureWorkshopShadow<Proveedor>(b);
             b.HasIndex(e => e.Nombre);
             b.HasIndex(e => e.Categoria);
             b.HasIndex("UsuarioCreacion", "Eliminado");
@@ -435,6 +542,7 @@ public partial class dbContext : DbContext
             b.Property<string>("UsuarioModificacion").HasMaxLength(64);
             b.Property<DateTime>("FechaModificacion");
 
+            ConfigureWorkshopShadow<RepuestoStock>(b);
             b.HasIndex("UsuarioCreacion", "Eliminado");
         });
 
@@ -443,6 +551,10 @@ public partial class dbContext : DbContext
             b.ToTable("NumeradorFactura");
 
             b.HasKey(x => x.Id);
+
+            b.Property(x => x.WorkshopId)
+                .HasDefaultValue(1)
+                .IsRequired();
 
             b.Property(x => x.OwnerKey)
                 .HasMaxLength(64)
@@ -462,8 +574,15 @@ public partial class dbContext : DbContext
             b.Property(x => x.UltimoNumero)
                 .IsRequired();
 
-            b.HasIndex(x => new { x.OwnerKey, x.Serie, x.Anio })
+            b.HasIndex(x => new { x.WorkshopId, x.Serie, x.Anio })
                 .IsUnique();
+
+            b.HasOne<Workshop>()
+                .WithMany()
+                .HasForeignKey(x => x.WorkshopId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            b.HasIndex(x => new { x.OwnerKey, x.Serie, x.Anio });
         });
 
         modelBuilder.Entity<FacturaEmitida>(b =>
@@ -506,6 +625,7 @@ public partial class dbContext : DbContext
             b.Property<string>("UsuarioModificacion").HasMaxLength(64);
             b.Property<DateTime>("FechaModificacion");
 
+            ConfigureWorkshopShadow<FacturaEmitida>(b);
             b.HasIndex(x => x.NumeroFactura).IsUnique();
             b.HasIndex(x => x.IdOrdenTrabajo);
             b.HasIndex("UsuarioCreacion", "Eliminado");
@@ -545,6 +665,7 @@ public partial class dbContext : DbContext
             b.Property<string>("UsuarioModificacion").HasMaxLength(64);
             b.Property<DateTime>("FechaModificacion");
 
+            ConfigureWorkshopShadow<AlertaCliente>(b);
             b.HasIndex(x => x.FechaAviso);
             b.HasIndex(x => x.Atendida);
             b.HasIndex("UsuarioCreacion", "Eliminado");
@@ -616,9 +737,35 @@ public partial class dbContext : DbContext
             b.Property<string>("UsuarioModificacion").HasMaxLength(64);
             b.Property<DateTime>("FechaModificacion");
 
-            b.HasIndex(x => x.NumeroPresupuesto).IsUnique();
+            ConfigureWorkshopShadow<Presupuesto>(b);
+            b.HasIndex("WorkshopId", nameof(Presupuesto.NumeroPresupuesto)).IsUnique();
             b.HasIndex(x => x.Matricula);
             b.HasIndex(x => x.Estado);
+            b.HasIndex("UsuarioCreacion", "Eliminado");
+        });
+
+        modelBuilder.Entity<ServicioFrecuente>(b =>
+        {
+            b.ToTable("ServicioFrecuente");
+
+            b.HasKey(x => x.Id);
+
+            b.Property(x => x.Nombre)
+                .HasMaxLength(180)
+                .IsUnicode(false)
+                .IsRequired();
+
+            b.Property(x => x.Eliminado)
+                .HasDefaultValue(false);
+
+            b.Property<bool>("Activo").HasDefaultValue(true);
+            b.Property<string>("UsuarioCreacion").HasMaxLength(64);
+            b.Property<DateTime>("FechaCreacion");
+            b.Property<string>("UsuarioModificacion").HasMaxLength(64);
+            b.Property<DateTime>("FechaModificacion");
+
+            ConfigureWorkshopShadow<ServicioFrecuente>(b);
+            b.HasIndex("WorkshopId", nameof(ServicioFrecuente.Nombre)).IsUnique();
             b.HasIndex("UsuarioCreacion", "Eliminado");
         });
 
@@ -628,5 +775,20 @@ public partial class dbContext : DbContext
 
 
     partial void OnModelCreatingPartial(ModelBuilder modelBuilder);
+
+    private static void ConfigureWorkshopShadow<TEntity>(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<TEntity> b)
+        where TEntity : class
+    {
+        b.Property<int>("WorkshopId")
+            .HasDefaultValue(1)
+            .IsRequired();
+
+        b.HasOne<Workshop>()
+            .WithMany()
+            .HasForeignKey("WorkshopId")
+            .OnDelete(DeleteBehavior.Restrict);
+
+        b.HasIndex("WorkshopId");
+    }
 }
 

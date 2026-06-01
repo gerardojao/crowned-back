@@ -27,6 +27,7 @@ builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IRepository, Repository<dbContext>>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
+builder.Services.AddScoped<ICurrentWorkshopService, CurrentWorkshopService>();
 builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
 
 // CORS
@@ -37,7 +38,11 @@ builder.Services.AddCors(options =>
             "https://invoice.familyapp.store",
             "https://familyapp.store",
             "https://www.familyapp.store",
-            "https://www.invoice.familyapp.store"
+            "https://www.invoice.familyapp.store",
+            "https://invoice.tallercrowned.store",
+            "https://tallercrowned.store",
+            "https://www.tallercrowned.store",
+            "https://www.invoice.tallercrowned.store"
         )
         .AllowAnyHeader()
         .AllowAnyMethod()
@@ -164,6 +169,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+app.UseStaticFiles();
 
 app.UseRouting();
 

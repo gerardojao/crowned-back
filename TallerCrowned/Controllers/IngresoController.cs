@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FamilyApp.Controllers
 {
+    [Authorize]
     [Route("api/[controller]")]
     [ApiController]
     public class IngresoController : ControllerBase
@@ -16,13 +17,20 @@ namespace FamilyApp.Controllers
         private readonly IWebHostEnvironment _env;
         private readonly dbContext _context;
         private readonly ICurrentUserService _currentUserService;
+        private readonly ICurrentWorkshopService _currentWorkshopService;
 
-        public IngresoController(IRepository repository, IWebHostEnvironment env, dbContext context, ICurrentUserService currentUserService)
+        public IngresoController(
+            IRepository repository,
+            IWebHostEnvironment env,
+            dbContext context,
+            ICurrentUserService currentUserService,
+            ICurrentWorkshopService currentWorkshopService)
         {
             _repository = repository;
             _env = env;
             _context = context;
             _currentUserService = currentUserService;
+            _currentWorkshopService = currentWorkshopService;
         }
 
         //[HttpGet]
@@ -61,14 +69,19 @@ namespace FamilyApp.Controllers
         //}
        
 
-        [Authorize]
         [HttpGet]
         public async Task<ActionResult<IEnumerable<Ingreso>>> GetIngresos()
         {
             Respuesta<object> respuesta = new();
             try
             {
-                var egresos = await _repository.SelectAll<Ingreso>();
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
+
+                var egresos = await _context.Ingresos
+                    .AsNoTracking()
+                    .Where(x => EF.Property<int>(x, "WorkshopId") == workshopId.Value)
+                    .ToListAsync();
                 if (egresos != null)
                 {
                     foreach (var item in egresos)
@@ -98,26 +111,24 @@ namespace FamilyApp.Controllers
         }
 
 
-        [Authorize]
         [HttpGet("detalle")]
         public async Task<ActionResult> GetIngresosDetalle(
         [FromQuery] DateTime? fechaInicio,
         [FromQuery] DateTime? fechaFin,
         [FromQuery] int? tipoId)
         {
-            var uidStr = _currentUserService.UserIdInt?.ToString() ?? "";
-           // if (uid == 0) return Unauthorized();
+            var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+            if (!workshopId.HasValue) return Forbid();
 
             if (fechaInicio.HasValue && fechaFin.HasValue && fechaFin < fechaInicio)
                 return BadRequest(new { message = "La fecha fin no puede ser menor que la fecha inicio." });
 
             var start = fechaInicio?.Date;
             var endExcl = fechaFin?.Date.AddDays(1);
-            var isAdmin = User.IsInRole("admin");
             var raw = await _context.FichaIngresos
                 .AsNoTracking()                
                 .Where(f => !f.Eliminado
-                    && (isAdmin || EF.Property<string>(f, "UsuarioCreacion") == uidStr)
+                    && EF.Property<int>(f, "WorkshopId") == workshopId.Value
                     && (!start.HasValue || f.Fecha >= start)
                     && (!endExcl.HasValue || f.Fecha < endExcl)
                     && (!tipoId.HasValue || f.NombreIngreso == tipoId.Value))
@@ -154,13 +165,13 @@ namespace FamilyApp.Controllers
             Respuesta<object> respuesta = new();
             try
             {
-                var uidStr = _currentUserService.UserIdInt?.ToString() ?? "";
-                var isAdmin = User.IsInRole("admin");
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
 
                 var ingre = await (from _ingreso in _context.Ingresos
                                    join _fIngreso in _context.FichaIngresos on _ingreso.Id equals _fIngreso.NombreIngreso
                                    where !_fIngreso.Eliminado &&
-                                   (isAdmin || EF.Property<string>(_fIngreso, "UsuarioCreacion") == uidStr)                          // <- filtro
+                                   EF.Property<int>(_fIngreso, "WorkshopId") == workshopId.Value
                                    select new { _ingreso.NombreIngreso, _fIngreso.Importe })
                                   .OrderByDescending(x => x.Importe)
                                   .ToListAsync();
@@ -200,12 +211,16 @@ namespace FamilyApp.Controllers
             var respuesta = new Respuesta<object>();
             try
             {
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
+
                 var fi = fechaInicio.Date;
                 var ffExcl = fechaFin.Date.AddDays(1); // [fi, ffExcl)
 
                 var ingre = await (from i in _context.Ingresos.AsNoTracking()
                                    join f in _context.FichaIngresos.AsNoTracking() on i.Id equals f.NombreIngreso
                                    where !f.Eliminado                                  // <- filtro
+                                      && EF.Property<int>(f, "WorkshopId") == workshopId.Value
                                       && f.Fecha.HasValue
                                       && f.Fecha.Value >= fi
                                       && f.Fecha.Value < ffExcl
@@ -237,8 +252,12 @@ namespace FamilyApp.Controllers
             Respuesta<object> respuesta = new();
             try
             {
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
 
-                await _repository.CreateAsync(ingreso);
+                _context.Ingresos.Add(ingreso);
+                _context.Entry(ingreso).Property("WorkshopId").CurrentValue = workshopId.Value;
+                await _context.SaveChangesAsync();
                 respuesta.Ok = 1;
                 respuesta.Message = "Ingreso registrado satisfactoriamente";
 
@@ -261,7 +280,13 @@ namespace FamilyApp.Controllers
 
             try
             {
-                var fi = await _context.FichaIngresos.FirstOrDefaultAsync(x => x.Id == id && !x.Eliminado);
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
+
+                var fi = await _context.FichaIngresos.FirstOrDefaultAsync(x =>
+                    x.Id == id &&
+                    !x.Eliminado &&
+                    EF.Property<int>(x, "WorkshopId") == workshopId.Value);
                 if (fi == null)
                 {
                     respuesta.Ok = 0;
@@ -271,7 +296,16 @@ namespace FamilyApp.Controllers
 
                 if (dto.Fecha.HasValue) fi.Fecha = dto.Fecha;
                 if (!string.IsNullOrWhiteSpace(dto.Mes)) fi.Mes = dto.Mes;
-                if (dto.NombreIngreso.HasValue) fi.NombreIngreso = dto.NombreIngreso.Value;
+                if (dto.NombreIngreso.HasValue)
+                {
+                    var tipoExiste = await _context.Ingresos.AnyAsync(x =>
+                        x.Id == dto.NombreIngreso.Value &&
+                        EF.Property<int>(x, "WorkshopId") == workshopId.Value);
+                    if (!tipoExiste)
+                        return BadRequest(new { message = "El tipo de ingreso no pertenece al taller activo." });
+
+                    fi.NombreIngreso = dto.NombreIngreso.Value;
+                }
                 if (dto.Descripcion != null) fi.Descripcion = dto.Descripcion; // permite null para limpiar
                 if (dto.Importe.HasValue) fi.Importe = dto.Importe.Value;
                 if (dto.Foto != null) fi.Foto = dto.Foto;
@@ -298,7 +332,13 @@ namespace FamilyApp.Controllers
             var respuesta = new Respuesta<object>();
             try
             {
-                var fi = await _context.FichaIngresos.FirstOrDefaultAsync(x => x.Id == id && !x.Eliminado);
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
+
+                var fi = await _context.FichaIngresos.FirstOrDefaultAsync(x =>
+                    x.Id == id &&
+                    !x.Eliminado &&
+                    EF.Property<int>(x, "WorkshopId") == workshopId.Value);
                 if (fi == null)
                 {
                     respuesta.Ok = 0;
@@ -328,10 +368,11 @@ namespace FamilyApp.Controllers
         public async Task<ActionResult> GetUltimos([FromQuery] int take = 5)
         {
             var respuesta = new Respuesta<object>();
-            var uidStr = _currentUserService.UserIdInt?.ToString() ?? "";
-            var isAdmin = User.IsInRole("admin");
             try
             {
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
+
                 if (take <= 0) take = 5;
                 if (take > 100) take = 100; // cota de seguridad
 
@@ -340,7 +381,7 @@ namespace FamilyApp.Controllers
                     from f in _context.FichaIngresos.AsNoTracking()
                     join i in _context.Ingresos.AsNoTracking() on f.NombreIngreso equals i.Id
                     where !f.Eliminado &&
-                                   (isAdmin || EF.Property<string>(f, "UsuarioCreacion") == uidStr)
+                                   EF.Property<int>(f, "WorkshopId") == workshopId.Value
                     select new MovimientoDTO
                     {
                         Id = f.Id,
@@ -358,7 +399,7 @@ namespace FamilyApp.Controllers
                     from f in _context.FichaEgresos.AsNoTracking()
                     join e in _context.Egresos.AsNoTracking() on f.NombreEgreso equals e.Id
                     where !f.Eliminado  &&
-                                   (isAdmin || EF.Property<string>(f, "UsuarioCreacion") == uidStr)
+                                   EF.Property<int>(f, "WorkshopId") == workshopId.Value
                     select new MovimientoDTO
                     {
                         Id = f.Id,
@@ -402,8 +443,13 @@ namespace FamilyApp.Controllers
 
             try
             {
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
+
                 var ingreso = await _context.Ingresos
-                    .FirstOrDefaultAsync(x => x.Id == id);
+                    .FirstOrDefaultAsync(x =>
+                        x.Id == id &&
+                        EF.Property<int>(x, "WorkshopId") == workshopId.Value);
 
                 if (ingreso == null)
                 {
@@ -444,8 +490,13 @@ namespace FamilyApp.Controllers
 
             try
             {
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
+
                 var ingreso = await _context.Ingresos
-                    .FirstOrDefaultAsync(x => x.Id == id);
+                    .FirstOrDefaultAsync(x =>
+                        x.Id == id &&
+                        EF.Property<int>(x, "WorkshopId") == workshopId.Value);
 
                 if (ingreso == null)
                 {
@@ -455,7 +506,10 @@ namespace FamilyApp.Controllers
                 }
 
                 var tieneMovimientos = await _context.FichaIngresos
-                    .AnyAsync(x => x.NombreIngreso == id && !x.Eliminado);
+                    .AnyAsync(x =>
+                        x.NombreIngreso == id &&
+                        !x.Eliminado &&
+                        EF.Property<int>(x, "WorkshopId") == workshopId.Value);
 
                 if (tieneMovimientos)
                 {

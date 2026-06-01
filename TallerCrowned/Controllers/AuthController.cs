@@ -21,6 +21,7 @@ public class AuthController : ControllerBase
     private readonly IEmailSender _mailer;
     private readonly IConfiguration _cfg;
     private readonly IWebHostEnvironment _env;
+    private readonly ILogger<AuthController> _logger;
 
     public AuthController(
         dbContext db,
@@ -28,7 +29,8 @@ public class AuthController : ControllerBase
         ITokenService tokens,
         IEmailSender mailer,
         IConfiguration cfg,
-        IWebHostEnvironment env)
+        IWebHostEnvironment env,
+        ILogger<AuthController> logger)
     {
         _db = db;
         _pwd = pwd;
@@ -36,6 +38,7 @@ public class AuthController : ControllerBase
         _mailer = mailer;
         _cfg = cfg;
         _env = env;
+        _logger = logger;
     }
 
     public class LoginDto
@@ -181,71 +184,12 @@ public class AuthController : ControllerBase
 
     // POST: api/auth/register
     [HttpPost("register")]
-    public async Task<IActionResult> Register([FromBody] RegisterDTO dto)
-    {
-        if (dto is null)
-            return BadRequest(new { ok = false, message = "Body vacío." });
-
-        var email = dto.Email?.Trim();
-        var password = dto.Password ?? "";
-
-        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
-            return BadRequest(new { ok = false, message = "Email y contraseña son obligatorios." });
-
-        email = email.ToLowerInvariant();
-
-        // Reglas: ajústalas a lo que quieras exigir
-        if (password.Length < 8 ||
-            !password.Any(char.IsUpper) ||
-            !password.Any(char.IsLower) ||
-            !password.Any(char.IsDigit))
+    public IActionResult Register([FromBody] RegisterDTO dto)
+        => StatusCode(StatusCodes.Status403Forbidden, new
         {
-            return BadRequest(new
-            {
-                ok = false,
-                message = "La contraseña debe tener al menos 8 caracteres, una mayúscula, una minúscula y un número."
-            });
-        }
-
-        // ¿Existe ya?
-        var exists = await _db.Users.AsNoTracking().AnyAsync(u => u.Email == email);
-        if (exists)
-            return Conflict(new { ok = false, message = "El correo ya está registrado." });
-
-        // Crear usuario
-        var user = new AppUser
-        {
-            Email = email,
-            FullName = dto.FullName, // <- ahora sí llega desde "nombre"
-            PasswordHash = _pwd.Hash(password),
-            Role = "user",
-            IsActive = true,
-            CreatedAt = DateTime.UtcNow
-        };
-
-        _db.Users.Add(user);
-        await _db.SaveChangesAsync(); // aquí ya tienes user.Id
-
-        // (Opcional) Auto-login tras registro
-        var jti = Guid.NewGuid();
-        var token = _tokens.CreateToken(user, jti, out var expiresAt);
-        user.ActiveSessionJti = jti;
-        user.ActiveSessionExpiresAt = expiresAt;
-        await _db.SaveChangesAsync();
-
-        // Devuelve shape que tu front ya sabe leer
-        return Ok(new
-        {
-            ok = true,
-            message = "Cuenta creada correctamente.",
-            data = new
-            {
-                user = new { user.Id, user.Email, user.Role, user.FullName },
-                token,
-                expiresAt
-            }
+            ok = false,
+            message = "El registro publico esta deshabilitado. Contacta con el administrador del sistema para crear usuarios de taller."
         });
-    }
 
     // === FORGOT PASSWORD ===
     [AllowAnonymous]
@@ -263,12 +207,17 @@ public class AuthController : ControllerBase
         // 1) token y hash
         var token = SecureToken.CreateUrlToken(32);
         var tokenHash = SecureToken.Sha256Base64(token);
+        var now = DateTime.UtcNow;
+
+        await _db.PasswordResets
+            .Where(x => x.UserId == user.Id && x.UsedAt == null && x.ExpiresAt >= now)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.UsedAt, now));
 
         _db.PasswordResets.Add(new PasswordReset
         {
             UserId = user.Id,
             TokenHash = tokenHash,
-            ExpiresAt = DateTime.UtcNow.AddMinutes(30),
+            ExpiresAt = now.AddMinutes(30),
             RequestIp = HttpContext.Connection.RemoteIpAddress?.ToString(),
             RequestUserAgent = Request.Headers.UserAgent.ToString()
         });
@@ -276,7 +225,8 @@ public class AuthController : ControllerBase
 
         // 2) URL del front desde config (usa SIEMPRE config, nunca Request.Host)
         //    NOTA: define App:FrontendBaseUrl = https://www.tallercrowned.store
-        var frontBase = _cfg["App:FrontendBaseUrl"] ?? "https://www.tallercrowned.store";
+        var frontBase = _cfg["App:FrontendBaseUrl"] ?? _cfg["App:AppBaseUrl"] ?? "https://www.tallercrowned.store";
+        frontBase = frontBase.TrimEnd('/');
         var link = $"{frontBase}/reset-password?token={Uri.EscapeDataString(token)}&email={Uri.EscapeDataString(email)}";
 
         // 3) Nombre visible (fallback al email) + encode seguro
@@ -290,7 +240,18 @@ public class AuthController : ControllerBase
         <p>Si no funciona, copia y pega esta URL en tu navegador:<br/>{H(link)}</p>
         <p>El enlace caduca en 30 minutos. Si no lo solicitaste, ignora este correo.</p>";
 
-        await _mailer.SendAsync(user.Email, "Restablecer contraseña - TallerCrowned", html);
+        try
+        {
+            await _mailer.SendAsync(user.Email, "Restablecer contraseña - TallerCrowned", html);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "No se pudo enviar el correo de recuperacion para el usuario {UserId}.", user.Id);
+            if (_env.IsDevelopment())
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = "No se pudo enviar el correo de recuperacion. Revisa la configuracion SMTP." });
+
+            return Ok(new { message = "Si el email existe, se ha enviado un enlace de reseteo." });
+        }
 
         if (_env.IsDevelopment())
             return Ok(new { message = "Email enviado (DEV).", devToken = token, devLink = link });
@@ -354,7 +315,13 @@ public class AuthController : ControllerBase
         user.ActiveSessionJti = null;
         user.ActiveSessionExpiresAt = null;
 
-        pr.UsedAt = DateTime.UtcNow;
+        var now = DateTime.UtcNow;
+
+        await _db.PasswordResets
+            .Where(x => x.UserId == user.Id && x.UsedAt == null)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.UsedAt, now));
+
+        pr.UsedAt = now;
 
         await _db.SaveChangesAsync();
 

@@ -5,9 +5,11 @@ using FamilyApp.Models;
 using Microsoft.AspNetCore.Mvc;
 using FamilyApp.DTOs.Egresos;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization;
 
 namespace FamilyApp.Controllers
 {
+    [Authorize]
     [Route("api/[controller]")]
     [ApiController]
     public class FichaEgresoController : ControllerBase
@@ -15,12 +17,20 @@ namespace FamilyApp.Controllers
 
         private readonly IRepository _repository;
         private readonly IWebHostEnvironment _env;
+        private readonly dbContext _context;
+        private readonly ICurrentWorkshopService _currentWorkshopService;
 
 
-        public FichaEgresoController(IRepository repository, IWebHostEnvironment env)
+        public FichaEgresoController(
+            IRepository repository,
+            IWebHostEnvironment env,
+            dbContext context,
+            ICurrentWorkshopService currentWorkshopService)
         {
            _repository = repository;
             _env = env;
+            _context = context;
+            _currentWorkshopService = currentWorkshopService;
      
         }
 
@@ -31,7 +41,13 @@ namespace FamilyApp.Controllers
             Respuesta<object> respuesta = new();
             try
             {
-                var fEgresos = await _repository.SelectAll<FichaEgreso>();
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
+
+                var fEgresos = await _context.FichaEgresos
+                    .AsNoTracking()
+                    .Where(x => EF.Property<int>(x, "WorkshopId") == workshopId.Value)
+                    .ToListAsync();
                 if (fEgresos != null)
                 {
                     foreach (var item in fEgresos)
@@ -64,15 +80,26 @@ namespace FamilyApp.Controllers
             var respuesta = new Respuesta<object>();
             try
             {
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
+
+                var tipoExiste = await _context.Egresos.AnyAsync(x =>
+                    x.Id == fichaEgreso.NombreEgreso &&
+                    EF.Property<int>(x, "WorkshopId") == workshopId.Value);
+                if (!tipoExiste)
+                    return BadRequest(new { message = "El tipo de gasto no pertenece al taller activo." });
+
                 // saneo básico (si lo necesitas)
                 fichaEgreso.Eliminado = false;
                 fichaEgreso.FechaEliminacion = null;
 
-                var newId = await _repository.CreateAsync(fichaEgreso);
+                _context.FichaEgresos.Add(fichaEgreso);
+                _context.Entry(fichaEgreso).Property("WorkshopId").CurrentValue = workshopId.Value;
+                await _context.SaveChangesAsync();
 
                 respuesta.Ok = 1;
                 respuesta.Message = "Success";
-                respuesta.Data.Add(new { Id = newId });
+                respuesta.Data.Add(new { fichaEgreso.Id });
                 return Ok(respuesta);
             }
             catch (Exception e)
@@ -90,7 +117,13 @@ namespace FamilyApp.Controllers
             var respuesta = new Respuesta<object>();
             try
             {
-                var fe = await _repository.SelectById<FichaEgreso>(id);
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
+
+                var fe = await _context.FichaEgresos
+                    .FirstOrDefaultAsync(x =>
+                        x.Id == id &&
+                        EF.Property<int>(x, "WorkshopId") == workshopId.Value);
                 if (fe == null || fe.Eliminado)
                 {
                     respuesta.Ok = 0;
@@ -101,12 +134,21 @@ namespace FamilyApp.Controllers
                 // Patch: solo asigna lo que venga en el DTO
                 if (dto.Fecha.HasValue) fe.Fecha = dto.Fecha;
                 if (!string.IsNullOrWhiteSpace(dto.Mes)) fe.Mes = dto.Mes;
-                if (dto.NombreEgreso.HasValue) fe.NombreEgreso = dto.NombreEgreso.Value;
+                if (dto.NombreEgreso.HasValue)
+                {
+                    var tipoExiste = await _context.Egresos.AnyAsync(x =>
+                        x.Id == dto.NombreEgreso.Value &&
+                        EF.Property<int>(x, "WorkshopId") == workshopId.Value);
+                    if (!tipoExiste)
+                        return BadRequest(new { message = "El tipo de gasto no pertenece al taller activo." });
+
+                    fe.NombreEgreso = dto.NombreEgreso.Value;
+                }
                 if (dto.Descripcion != null) fe.Descripcion = dto.Descripcion; // acepta null
                 if (dto.Importe.HasValue) fe.Importe = dto.Importe.Value;
                 if (dto.Foto != null) fe.Foto = dto.Foto;
 
-                await _repository.UpdateAsync(fe);
+                await _context.SaveChangesAsync();
 
                 respuesta.Ok = 1;
                 respuesta.Message = "Detalle de egreso actualizado correctamente.";
@@ -128,7 +170,13 @@ namespace FamilyApp.Controllers
             var respuesta = new Respuesta<object>();
             try
             {
-                var fe = await _repository.SelectById<FichaEgreso>(id);
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
+
+                var fe = await _context.FichaEgresos
+                    .FirstOrDefaultAsync(x =>
+                        x.Id == id &&
+                        EF.Property<int>(x, "WorkshopId") == workshopId.Value);
                 if (fe == null || fe.Eliminado)
                 {
                     respuesta.Ok = 0;
@@ -139,7 +187,7 @@ namespace FamilyApp.Controllers
                 fe.Eliminado = true;
                 fe.FechaEliminacion = DateTime.UtcNow;
 
-                await _repository.UpdateAsync(fe);
+                await _context.SaveChangesAsync();
 
                 respuesta.Ok = 1;
                 respuesta.Message = "Detalle de egreso eliminado (lógico) correctamente.";

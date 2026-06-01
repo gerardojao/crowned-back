@@ -13,7 +13,7 @@ namespace FamilyApp.Models
         public string PasswordHash { get; set; } = null!; // hash PBKDF2
 
         [MaxLength(60)]
-        public string Role { get; set; } = "user"; // "admin" | "user"
+        public string Role { get; set; } = "user"; // "superadmin" | "admin" | "user"
 
         [MaxLength(160)]
         public string? FullName { get; set; }

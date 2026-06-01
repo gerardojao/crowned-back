@@ -11,15 +11,26 @@ namespace TallerCrowned.Controllers
     [Authorize]
     [Route("api/[controller]")]
     [ApiController]
-    public class OrdenTrabajoController : Controller
+public class OrdenTrabajoController : Controller
     {
         private readonly dbContext _context;
         private readonly ICurrentUserService _currentUserService;
+        private readonly ICurrentWorkshopService _currentWorkshopService;
 
-        public OrdenTrabajoController(dbContext context, ICurrentUserService currentUserService)
+        public OrdenTrabajoController(
+            dbContext context,
+            ICurrentUserService currentUserService,
+            ICurrentWorkshopService currentWorkshopService)
         {
             _context = context;
             _currentUserService = currentUserService;
+            _currentWorkshopService = currentWorkshopService;
+        }
+
+        private static bool IsEditLocked(string? estado)
+        {
+            var normalized = (estado ?? "").Trim().ToLowerInvariant();
+            return normalized is "reparando" or "esperando repuesto" or "listo" or "entregado";
         }
 
         [HttpGet]
@@ -29,14 +40,14 @@ namespace TallerCrowned.Controllers
 
             try
             {
-                var uidStr = _currentUserService.UserIdInt?.ToString() ?? "";
-                var isAdmin = User.IsInRole("admin");
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
 
                 var query = _context.OrdenesTrabajo
                     .AsNoTracking()
                     .Where(x =>
                         !x.Eliminado &&
-                        (isAdmin || EF.Property<string>(x, "UsuarioCreacion") == uidStr)
+                        EF.Property<int>(x, "WorkshopId") == workshopId.Value
                     );
 
                 if (!string.IsNullOrWhiteSpace(filter.Matricula))
@@ -126,8 +137,8 @@ namespace TallerCrowned.Controllers
 
             try
             {
-                var uidStr = _currentUserService.UserIdInt?.ToString() ?? "";
-                var isAdmin = User.IsInRole("admin");
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
 
                 if (take <= 0) take = 10;
                 if (take > 100) take = 100;
@@ -136,7 +147,7 @@ namespace TallerCrowned.Controllers
                     .AsNoTracking()
                     .Where(x =>
                         !x.Eliminado &&
-                        (isAdmin || EF.Property<string>(x, "UsuarioCreacion") == uidStr)
+                        EF.Property<int>(x, "WorkshopId") == workshopId.Value
                     )
                     .OrderByDescending(x => x.Fecha)
                     .ThenByDescending(x => x.Id)
@@ -181,15 +192,15 @@ namespace TallerCrowned.Controllers
 
             try
             {
-                var uidStr = _currentUserService.UserIdInt?.ToString() ?? "";
-                var isAdmin = User.IsInRole("admin");
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
 
                 var orden = await _context.OrdenesTrabajo
                     .AsNoTracking()
                     .Where(x =>
                         x.Id == id &&
                         !x.Eliminado &&
-                        (isAdmin || EF.Property<string>(x, "UsuarioCreacion") == uidStr)
+                        EF.Property<int>(x, "WorkshopId") == workshopId.Value
                     )
                     .Select(x => new OrdenTrabajo
                     {
@@ -249,6 +260,9 @@ namespace TallerCrowned.Controllers
                 if (string.IsNullOrWhiteSpace(dto.Trabajo))
                     return BadRequest(new { message = "El trabajo es requerido." });
 
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
+
                 var orden = new OrdenTrabajo
                 {
                     Cliente = dto.Cliente.Trim(),
@@ -267,6 +281,7 @@ namespace TallerCrowned.Controllers
                 };
 
                 _context.OrdenesTrabajo.Add(orden);
+                _context.Entry(orden).Property("WorkshopId").CurrentValue = workshopId.Value;
                 await _context.SaveChangesAsync();
 
                 respuesta.Ok = 1;
@@ -290,14 +305,14 @@ namespace TallerCrowned.Controllers
 
             try
             {
-                var uidStr = _currentUserService.UserIdInt?.ToString() ?? "";
-                var isAdmin = User.IsInRole("admin");
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
 
                 var orden = await _context.OrdenesTrabajo
                     .FirstOrDefaultAsync(x =>
                         x.Id == id &&
                         !x.Eliminado &&
-                        (isAdmin || EF.Property<string>(x, "UsuarioCreacion") == uidStr)
+                        EF.Property<int>(x, "WorkshopId") == workshopId.Value
                     );
 
                 if (orden == null)
@@ -305,6 +320,14 @@ namespace TallerCrowned.Controllers
                     respuesta.Ok = 0;
                     respuesta.Message = "No existe la orden o fue eliminada.";
                     return NotFound(respuesta);
+                }
+
+                if (IsEditLocked(orden.Estado))
+                {
+                    return BadRequest(new
+                    {
+                        message = "No se puede editar una orden en reparacion, lista o entregada."
+                    });
                 }
 
                 if (!string.IsNullOrWhiteSpace(dto.Cliente)) orden.Cliente = dto.Cliente.Trim();
@@ -352,14 +375,14 @@ namespace TallerCrowned.Controllers
                 if (string.IsNullOrWhiteSpace(dto.Estado))
                     return BadRequest(new { message = "El estado es requerido." });
 
-                var uidStr = _currentUserService.UserIdInt?.ToString() ?? "";
-                var isAdmin = User.IsInRole("admin");
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
 
                 var orden = await _context.OrdenesTrabajo
                     .FirstOrDefaultAsync(x =>
                         x.Id == id &&
                         !x.Eliminado &&
-                        (isAdmin || EF.Property<string>(x, "UsuarioCreacion") == uidStr)
+                        EF.Property<int>(x, "WorkshopId") == workshopId.Value
                     );
 
                 if (orden == null)
@@ -392,14 +415,14 @@ namespace TallerCrowned.Controllers
         {
             var respuesta = new Respuesta<object>();
 
-            var uidStr = _currentUserService.UserIdInt?.ToString() ?? "";
-            var isAdmin = User.IsInRole("admin");
+            var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+            if (!workshopId.HasValue) return Forbid();
 
             var orden = await _context.OrdenesTrabajo
                 .FirstOrDefaultAsync(x =>
                     x.Id == id &&
                     !x.Eliminado &&
-                    (isAdmin || EF.Property<string>(x, "UsuarioCreacion") == uidStr)
+                    EF.Property<int>(x, "WorkshopId") == workshopId.Value
                 );
 
             if (orden == null)
@@ -427,14 +450,14 @@ namespace TallerCrowned.Controllers
 
             try
             {
-                var uidStr = _currentUserService.UserIdInt?.ToString() ?? "";
-                var isAdmin = User.IsInRole("admin");
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
 
                 var orden = await _context.OrdenesTrabajo
                     .FirstOrDefaultAsync(x =>
                         x.Id == id &&
                         !x.Eliminado &&
-                        (isAdmin || EF.Property<string>(x, "UsuarioCreacion") == uidStr)
+                        EF.Property<int>(x, "WorkshopId") == workshopId.Value
                     );
 
                 if (orden == null)

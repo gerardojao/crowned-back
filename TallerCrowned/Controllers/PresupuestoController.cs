@@ -14,11 +14,16 @@ namespace TallerCrowned.Controllers
     {
         private readonly dbContext _context;
         private readonly ICurrentUserService _currentUserService;
+        private readonly ICurrentWorkshopService _currentWorkshopService;
 
-        public PresupuestoController(dbContext context, ICurrentUserService currentUserService)
+        public PresupuestoController(
+            dbContext context,
+            ICurrentUserService currentUserService,
+            ICurrentWorkshopService currentWorkshopService)
         {
             _context = context;
             _currentUserService = currentUserService;
+            _currentWorkshopService = currentWorkshopService;
         }
 
         [HttpGet]
@@ -27,20 +32,22 @@ namespace TallerCrowned.Controllers
      [FromQuery] string? cliente,
      [FromQuery] string? estado,
      [FromQuery] DateTime? fechaDesde,
-     [FromQuery] DateTime? fechaHasta)
+     [FromQuery] DateTime? fechaHasta,
+     [FromQuery] int page = 1,
+     [FromQuery] int pageSize = 10)
         {
             var respuesta = new Respuesta<object>();
 
             try
             {
-                var uidStr = _currentUserService.UserIdInt?.ToString() ?? "";
-                var isAdmin = User.IsInRole("admin");
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
 
                 var query = _context.Presupuestos
                     .AsNoTracking()
                     .Where(x =>
                         !x.Eliminado &&
-                        (isAdmin || EF.Property<string>(x, "UsuarioCreacion") == uidStr)
+                        EF.Property<int>(x, "WorkshopId") == workshopId.Value
                     );
 
                 if (!string.IsNullOrWhiteSpace(matricula))
@@ -73,14 +80,28 @@ namespace TallerCrowned.Controllers
                     query = query.Where(x => x.Fecha < hasta);
                 }
 
+                if (page <= 0) page = 1;
+                if (pageSize <= 0) pageSize = 10;
+                if (pageSize > 100) pageSize = 100;
+
+                var total = await query.CountAsync();
+
                 var data = await query
                     .OrderByDescending(x => x.Fecha)
                     .ThenByDescending(x => x.Id)
+                    .Skip((page - 1) * pageSize)
+                    .Take(pageSize)
                     .ToListAsync();
 
                 respuesta.Ok = 1;
                 respuesta.Message = "Presupuestos";
-                respuesta.Data.Add(data);
+                respuesta.Data.Add(new
+                {
+                    items = data,
+                    total,
+                    page,
+                    pageSize
+                });
 
                 return Ok(respuesta);
             }
@@ -99,8 +120,8 @@ namespace TallerCrowned.Controllers
 
             try
             {
-                var uidStr = _currentUserService.UserIdInt?.ToString() ?? "";
-                var isAdmin = User.IsInRole("admin");
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
 
                 if (take <= 0) take = 10;
                 if (take > 100) take = 100;
@@ -109,7 +130,7 @@ namespace TallerCrowned.Controllers
                     .AsNoTracking()
                     .Where(x =>
                         !x.Eliminado &&
-                        (isAdmin || EF.Property<string>(x, "UsuarioCreacion") == uidStr)
+                        EF.Property<int>(x, "WorkshopId") == workshopId.Value
                     )
                     .OrderByDescending(x => x.Fecha)
                     .ThenByDescending(x => x.Id)
@@ -137,15 +158,15 @@ namespace TallerCrowned.Controllers
 
             try
             {
-                var uidStr = _currentUserService.UserIdInt?.ToString() ?? "";
-                var isAdmin = User.IsInRole("admin");
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
 
                 var presupuesto = await _context.Presupuestos
                     .AsNoTracking()
                     .FirstOrDefaultAsync(x =>
                         x.Id == id &&
                         !x.Eliminado &&
-                        (isAdmin || EF.Property<string>(x, "UsuarioCreacion") == uidStr)
+                        EF.Property<int>(x, "WorkshopId") == workshopId.Value
                     );
 
                 if (presupuesto == null)
@@ -188,15 +209,41 @@ namespace TallerCrowned.Controllers
                 if (string.IsNullOrWhiteSpace(dto.Trabajo))
                     return BadRequest(new { message = "El trabajo es requerido." });
 
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
+
                 var anio = DateTime.Now.Year;
+                var workshop = await _context.Workshops
+                    .AsNoTracking()
+                    .Where(x => x.Id == workshopId.Value)
+                    .Select(x => new { x.SerieFactura })
+                    .FirstOrDefaultAsync();
 
                 var ultimoNumero = await _context.Presupuestos
-                    .Where(x => x.Fecha.Year == anio)
+                    .Where(x => x.Fecha.Year == anio && EF.Property<int>(x, "WorkshopId") == workshopId.Value)
                     .CountAsync();
 
+                var serie = workshop?.SerieFactura?.Trim().ToUpperInvariant();
+                string BuildNumero(int sequential) =>
+                    string.IsNullOrWhiteSpace(serie) || serie == "A"
+                        ? $"P-{sequential}-{anio}"
+                        : $"{serie}-P-{anio}-{sequential:0000}";
+
                 var numero = string.IsNullOrWhiteSpace(dto.NumeroPresupuesto)
-                    ? $"P-{ultimoNumero + 1}-{anio}"
+                    ? BuildNumero(ultimoNumero + 1)
                     : dto.NumeroPresupuesto.Trim();
+
+                if (string.IsNullOrWhiteSpace(dto.NumeroPresupuesto))
+                {
+                    var next = ultimoNumero + 1;
+                    while (await _context.Presupuestos.AnyAsync(x =>
+                        EF.Property<int>(x, "WorkshopId") == workshopId.Value &&
+                        x.NumeroPresupuesto == numero))
+                    {
+                        next++;
+                        numero = BuildNumero(next);
+                    }
+                }
 
                 var presupuesto = new Presupuesto
                 {
@@ -219,6 +266,7 @@ namespace TallerCrowned.Controllers
                 };
 
                 _context.Presupuestos.Add(presupuesto);
+                _context.Entry(presupuesto).Property("WorkshopId").CurrentValue = workshopId.Value;
                 await _context.SaveChangesAsync();
 
                 respuesta.Ok = 1;
@@ -246,14 +294,14 @@ namespace TallerCrowned.Controllers
 
             try
             {
-                var uidStr = _currentUserService.UserIdInt?.ToString() ?? "";
-                var isAdmin = User.IsInRole("admin");
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
 
                 var presupuesto = await _context.Presupuestos
                     .FirstOrDefaultAsync(x =>
                         x.Id == id &&
                         !x.Eliminado &&
-                        (isAdmin || EF.Property<string>(x, "UsuarioCreacion") == uidStr)
+                        EF.Property<int>(x, "WorkshopId") == workshopId.Value
                     );
 
                 if (presupuesto == null)
@@ -308,14 +356,14 @@ namespace TallerCrowned.Controllers
                 if (string.IsNullOrWhiteSpace(dto.Estado))
                     return BadRequest(new { message = "El estado es requerido." });
 
-                var uidStr = _currentUserService.UserIdInt?.ToString() ?? "";
-                var isAdmin = User.IsInRole("admin");
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
 
                 var presupuesto = await _context.Presupuestos
                     .FirstOrDefaultAsync(x =>
                         x.Id == id &&
                         !x.Eliminado &&
-                        (isAdmin || EF.Property<string>(x, "UsuarioCreacion") == uidStr)
+                        EF.Property<int>(x, "WorkshopId") == workshopId.Value
                     );
 
                 if (presupuesto == null)
@@ -354,14 +402,14 @@ namespace TallerCrowned.Controllers
 
             try
             {
-                var uidStr = _currentUserService.UserIdInt?.ToString() ?? "";
-                var isAdmin = User.IsInRole("admin");
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
 
                 var presupuesto = await _context.Presupuestos
                     .FirstOrDefaultAsync(x =>
                         x.Id == id &&
                         !x.Eliminado &&
-                        (isAdmin || EF.Property<string>(x, "UsuarioCreacion") == uidStr)
+                        EF.Property<int>(x, "WorkshopId") == workshopId.Value
                     );
 
                 if (presupuesto == null)
@@ -396,6 +444,7 @@ namespace TallerCrowned.Controllers
                 };
 
                 _context.OrdenesTrabajo.Add(orden);
+                _context.Entry(orden).Property("WorkshopId").CurrentValue = workshopId.Value;
                 await _context.SaveChangesAsync();
 
                 presupuesto.ConvertidoEnOrden = true;
@@ -429,14 +478,14 @@ namespace TallerCrowned.Controllers
 
             try
             {
-                var uidStr = _currentUserService.UserIdInt?.ToString() ?? "";
-                var isAdmin = User.IsInRole("admin");
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
 
                 var presupuesto = await _context.Presupuestos
                     .FirstOrDefaultAsync(x =>
                         x.Id == id &&
                         !x.Eliminado &&
-                        (isAdmin || EF.Property<string>(x, "UsuarioCreacion") == uidStr)
+                        EF.Property<int>(x, "WorkshopId") == workshopId.Value
                     );
 
                 if (presupuesto == null)
@@ -469,3 +518,5 @@ namespace TallerCrowned.Controllers
         }
     }
 }
+
+

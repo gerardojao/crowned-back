@@ -9,15 +9,27 @@ namespace FamilyApp.Services
     public class SmtpEmailSender : IEmailSender
     {
         private readonly IConfiguration _cfg;
-        public SmtpEmailSender(IConfiguration cfg) => _cfg = cfg;
+        private readonly ILogger<SmtpEmailSender> _logger;
+
+        public SmtpEmailSender(IConfiguration cfg, ILogger<SmtpEmailSender> logger)
+        {
+            _cfg = cfg;
+            _logger = logger;
+        }
 
         public async Task SendAsync(string to, string subject, string htmlBody, string? replyTo = null, string? fromName = null)
         {
+            if (_cfg.GetValue<bool>("Email:DevPrintEmails"))
+            {
+                _logger.LogInformation("DEV email to {To}. Subject: {Subject}. Body: {Body}", to, subject, htmlBody);
+                return;
+            }
+
             var host = _cfg["Smtp:Host"] ?? "smtp.resend.com";
             var port = int.TryParse(_cfg["Smtp:Port"], out var p) ? p : 587;
             var user = _cfg["Smtp:User"] ?? "resend";
             var pass = _cfg["Smtp:Pass"];
-            var from = _cfg["Smtp:From"] ?? "no-reply@familyapp.store";
+            var from = _cfg["Smtp:From"] ?? _cfg["Email:From"] ?? "no-reply@tallercrowned.store";
             var display = string.IsNullOrWhiteSpace(fromName) ? "TallerCrowned" : fromName;
 
             using var client = new SmtpClient(host, port)

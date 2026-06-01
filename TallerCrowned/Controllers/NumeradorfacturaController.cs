@@ -15,11 +15,16 @@ namespace TallerCrowned.Controllers
     {
         private readonly dbContext _context;
         private readonly ICurrentUserService _currentUserService;
+        private readonly ICurrentWorkshopService _currentWorkshopService;
 
-        public NumeradorFacturaController(dbContext context, ICurrentUserService currentUserService)
+        public NumeradorFacturaController(
+            dbContext context,
+            ICurrentUserService currentUserService,
+            ICurrentWorkshopService currentWorkshopService)
         {
             _context = context;
             _currentUserService = currentUserService;
+            _currentWorkshopService = currentWorkshopService;
         }
 
         [HttpPost("siguiente")]
@@ -30,6 +35,8 @@ namespace TallerCrowned.Controllers
             try
             {
                 var anio = DateTime.Now.Year;
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
                 var ownerKey = GetOwnerKey();
                 serie = NormalizeSerie(serie);
 
@@ -37,7 +44,7 @@ namespace TallerCrowned.Controllers
 
                 var numerador = await _context.NumeradoresFactura
                     .FirstOrDefaultAsync(x =>
-                        x.OwnerKey == ownerKey &&
+                        x.WorkshopId == workshopId.Value &&
                         x.Serie == serie &&
                         x.Anio == anio
                     );
@@ -46,6 +53,7 @@ namespace TallerCrowned.Controllers
                 {
                     numerador = new NumeradorFactura
                     {
+                        WorkshopId = workshopId.Value,
                         OwnerKey = ownerKey,
                         Serie = serie,
                         Anio = anio,
@@ -68,7 +76,7 @@ namespace TallerCrowned.Controllers
                     numero = numerador.UltimoNumero,
                     anio,
                     serie,
-                    numeroFactura = FormatNumeroFactura(serie, ownerKey, numerador.UltimoNumero, anio)
+                    numeroFactura = FormatNumeroFactura(serie, workshopId.Value, numerador.UltimoNumero, anio)
                 });
 
                 return Ok(respuesta);
@@ -87,12 +95,14 @@ namespace TallerCrowned.Controllers
             var respuesta = new Respuesta<object>();
 
             var anio = DateTime.Now.Year;
+            var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+            if (!workshopId.HasValue) return Forbid();
             var ownerKey = GetOwnerKey();
             serie = NormalizeSerie(serie);
 
             var ultimoNumero = await _context.NumeradoresFactura
                 .Where(x =>
-                    x.OwnerKey == ownerKey &&
+                    x.WorkshopId == workshopId.Value &&
                     x.Serie == serie &&
                     x.Anio == anio
                 )
@@ -108,7 +118,7 @@ namespace TallerCrowned.Controllers
                 numero = siguiente,
                 anio,
                 serie,
-                numeroFactura = FormatNumeroFactura(serie, ownerKey, siguiente, anio)
+                numeroFactura = FormatNumeroFactura(serie, workshopId.Value, siguiente, anio)
             });
 
             return Ok(respuesta);
@@ -127,10 +137,9 @@ namespace TallerCrowned.Controllers
             return clean.Length > 20 ? clean[..20] : clean;
         }
 
-        private static string FormatNumeroFactura(string serie, string ownerKey, int numero, int anio)
+        private static string FormatNumeroFactura(string serie, int workshopId, int numero, int anio)
         {
-            var ownerSegment = ownerKey.Replace(" ", "").ToUpperInvariant();
-            return $"{serie}-{anio}-{ownerSegment}-{numero:D4}";
+            return $"{serie}-{anio}-T{workshopId}-{numero:D4}";
         }
     }
 }

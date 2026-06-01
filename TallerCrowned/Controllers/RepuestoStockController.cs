@@ -16,11 +16,16 @@ namespace TallerCrowned.Controllers
     {
         private readonly dbContext _context;
         private readonly ICurrentUserService _currentUserService;
+        private readonly ICurrentWorkshopService _currentWorkshopService;
 
-        public RepuestoStockController(dbContext context, ICurrentUserService currentUserService)
+        public RepuestoStockController(
+            dbContext context,
+            ICurrentUserService currentUserService,
+            ICurrentWorkshopService currentWorkshopService)
         {
             _context = context;
             _currentUserService = currentUserService;
+            _currentWorkshopService = currentWorkshopService;
         }
 
         [HttpGet]
@@ -30,15 +35,15 @@ namespace TallerCrowned.Controllers
 
             try
             {
-                var uidStr = _currentUserService.UserIdInt?.ToString() ?? "";
-                var isAdmin = User.IsInRole("admin");
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
 
                 var query = _context.RepuestosStock
                     .AsNoTracking()
                     .Include(x => x.Proveedor)
                     .Where(x =>
                         !x.Eliminado &&
-                        (isAdmin || EF.Property<string>(x, "UsuarioCreacion") == uidStr)
+                        EF.Property<int>(x, "WorkshopId") == workshopId.Value
                     );
 
                 if (!string.IsNullOrWhiteSpace(search))
@@ -111,8 +116,8 @@ namespace TallerCrowned.Controllers
 
             try
             {
-                var uidStr = _currentUserService.UserIdInt?.ToString() ?? "";
-                var isAdmin = User.IsInRole("admin");
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
 
                 var data = await _context.RepuestosStock
                     .AsNoTracking()
@@ -120,7 +125,7 @@ namespace TallerCrowned.Controllers
                     .Where(x =>
                         !x.Eliminado &&
                         x.Cantidad <= x.StockMinimo &&
-                        (isAdmin || EF.Property<string>(x, "UsuarioCreacion") == uidStr)
+                        EF.Property<int>(x, "WorkshopId") == workshopId.Value
                     )
                     .OrderBy(x => x.Cantidad)
                     .ThenBy(x => x.Nombre)
@@ -164,8 +169,8 @@ namespace TallerCrowned.Controllers
 
             try
             {
-                var uidStr = _currentUserService.UserIdInt?.ToString() ?? "";
-                var isAdmin = User.IsInRole("admin");
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
 
                 var item = await _context.RepuestosStock
                     .AsNoTracking()
@@ -173,7 +178,7 @@ namespace TallerCrowned.Controllers
                     .Where(x =>
                         x.Id == id &&
                         !x.Eliminado &&
-                        (isAdmin || EF.Property<string>(x, "UsuarioCreacion") == uidStr)
+                        EF.Property<int>(x, "WorkshopId") == workshopId.Value
                     )
                     .Select(x => new RepuestoStockReadDTO
                     {
@@ -228,8 +233,15 @@ namespace TallerCrowned.Controllers
                 if (dto.IdProveedor <= 0)
                     return BadRequest(new { message = "El proveedor es requerido." });
 
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
+
                 var proveedorExiste = await _context.Proveedores
-                    .AnyAsync(x => x.Id == dto.IdProveedor && !x.Eliminado);
+                    .AnyAsync(x =>
+                        x.Id == dto.IdProveedor &&
+                        !x.Eliminado &&
+                        EF.Property<int>(x, "WorkshopId") == workshopId.Value
+                    );
 
                 if (!proveedorExiste)
                     return BadRequest(new { message = "El proveedor indicado no existe." });
@@ -251,6 +263,7 @@ namespace TallerCrowned.Controllers
                 };
 
                 _context.RepuestosStock.Add(repuesto);
+                _context.Entry(repuesto).Property("WorkshopId").CurrentValue = workshopId.Value;
                 await _context.SaveChangesAsync();
 
                 respuesta.Ok = 1;
@@ -278,14 +291,14 @@ namespace TallerCrowned.Controllers
 
             try
             {
-                var uidStr = _currentUserService.UserIdInt?.ToString() ?? "";
-                var isAdmin = User.IsInRole("admin");
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
 
                 var repuesto = await _context.RepuestosStock
                     .FirstOrDefaultAsync(x =>
                         x.Id == id &&
                         !x.Eliminado &&
-                        (isAdmin || EF.Property<string>(x, "UsuarioCreacion") == uidStr)
+                        EF.Property<int>(x, "WorkshopId") == workshopId.Value
                     );
 
                 if (repuesto == null)
@@ -298,7 +311,11 @@ namespace TallerCrowned.Controllers
                 if (dto.IdProveedor.HasValue)
                 {
                     var proveedorExiste = await _context.Proveedores
-                        .AnyAsync(x => x.Id == dto.IdProveedor.Value && !x.Eliminado);
+                        .AnyAsync(x =>
+                            x.Id == dto.IdProveedor.Value &&
+                            !x.Eliminado &&
+                            EF.Property<int>(x, "WorkshopId") == workshopId.Value
+                        );
 
                     if (!proveedorExiste)
                         return BadRequest(new { message = "El proveedor indicado no existe." });
@@ -348,14 +365,14 @@ namespace TallerCrowned.Controllers
 
             try
             {
-                var uidStr = _currentUserService.UserIdInt?.ToString() ?? "";
-                var isAdmin = User.IsInRole("admin");
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
 
                 var repuesto = await _context.RepuestosStock
                     .FirstOrDefaultAsync(x =>
                         x.Id == id &&
                         !x.Eliminado &&
-                        (isAdmin || EF.Property<string>(x, "UsuarioCreacion") == uidStr)
+                        EF.Property<int>(x, "WorkshopId") == workshopId.Value
                     );
 
                 if (repuesto == null)
@@ -395,14 +412,14 @@ namespace TallerCrowned.Controllers
 
             try
             {
-                var uidStr = _currentUserService.UserIdInt?.ToString() ?? "";
-                var isAdmin = User.IsInRole("admin");
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
 
                 var repuesto = await _context.RepuestosStock
                     .FirstOrDefaultAsync(x =>
                         x.Id == id &&
                         !x.Eliminado &&
-                        (isAdmin || EF.Property<string>(x, "UsuarioCreacion") == uidStr)
+                        EF.Property<int>(x, "WorkshopId") == workshopId.Value
                     );
 
                 if (repuesto == null)

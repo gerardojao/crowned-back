@@ -16,11 +16,16 @@ namespace TallerCrowned.Controllers
     {
         private readonly dbContext _context;
         private readonly ICurrentUserService _currentUserService;
+        private readonly ICurrentWorkshopService _currentWorkshopService;
 
-        public ClienteController(dbContext context, ICurrentUserService currentUserService)
+        public ClienteController(
+            dbContext context,
+            ICurrentUserService currentUserService,
+            ICurrentWorkshopService currentWorkshopService)
         {
             _context = context;
             _currentUserService = currentUserService;
+            _currentWorkshopService = currentWorkshopService;
         }
 
         [HttpGet]
@@ -30,14 +35,14 @@ namespace TallerCrowned.Controllers
 
             try
             {
-                var uidStr = _currentUserService.UserIdInt?.ToString() ?? "";
-                var isAdmin = User.IsInRole("admin");
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
 
                 var query = _context.Clientes
                     .AsNoTracking()
                     .Where(x =>
                         !x.Eliminado &&
-                        (isAdmin || EF.Property<string>(x, "UsuarioCreacion") == uidStr)
+                        EF.Property<int>(x, "WorkshopId") == workshopId.Value
                     );
 
                 if (!string.IsNullOrWhiteSpace(filter.Search))
@@ -118,15 +123,15 @@ namespace TallerCrowned.Controllers
 
             try
             {
-                var uidStr = _currentUserService.UserIdInt?.ToString() ?? "";
-                var isAdmin = User.IsInRole("admin");
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
 
                 var cliente = await _context.Clientes
                     .AsNoTracking()
                     .Where(x =>
                         x.Id == id &&
                         !x.Eliminado &&
-                        (isAdmin || EF.Property<string>(x, "UsuarioCreacion") == uidStr)
+                        EF.Property<int>(x, "WorkshopId") == workshopId.Value
                     )
                     .Select(x => new Cliente
                     {
@@ -184,13 +189,27 @@ namespace TallerCrowned.Controllers
                 if (string.IsNullOrWhiteSpace(dto.Modelo))
                     return BadRequest(new { message = "El modelo es requerido." });
 
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
+
+                var matricula = dto.Matricula.Trim().ToUpper();
+                var existing = await _context.Clientes
+                    .AsNoTracking()
+                    .AnyAsync(x =>
+                        !x.Eliminado &&
+                        EF.Property<int>(x, "WorkshopId") == workshopId.Value &&
+                        x.Matricula == matricula);
+
+                if (existing)
+                    return BadRequest(new { message = "Cliente ya registrado." });
+
                 var cliente = new Cliente
                 {
                     Nombre = dto.Nombre.Trim(),
                     Telefono = dto.Telefono.Trim(),
                     Email = dto.Email?.Trim(),
                     Direccion = dto.Direccion?.Trim(),
-                    Matricula = dto.Matricula.Trim().ToUpper(),
+                    Matricula = matricula,
                     Marca = dto.Marca?.Trim(),
                     Modelo = dto.Modelo.Trim(),
               
@@ -200,6 +219,7 @@ namespace TallerCrowned.Controllers
                 };
 
                 _context.Clientes.Add(cliente);
+                _context.Entry(cliente).Property("WorkshopId").CurrentValue = workshopId.Value;
                 await _context.SaveChangesAsync();
 
                 respuesta.Ok = 1;
@@ -223,14 +243,14 @@ namespace TallerCrowned.Controllers
 
             try
             {
-                var uidStr = _currentUserService.UserIdInt?.ToString() ?? "";
-                var isAdmin = User.IsInRole("admin");
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
 
                 var cliente = await _context.Clientes
                     .FirstOrDefaultAsync(x =>
                         x.Id == id &&
                         !x.Eliminado &&
-                        (isAdmin || EF.Property<string>(x, "UsuarioCreacion") == uidStr)
+                        EF.Property<int>(x, "WorkshopId") == workshopId.Value
                     );
 
                 if (cliente == null)
@@ -278,14 +298,14 @@ namespace TallerCrowned.Controllers
 
             try
             {
-                var uidStr = _currentUserService.UserIdInt?.ToString() ?? "";
-                var isAdmin = User.IsInRole("admin");
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
 
                 var cliente = await _context.Clientes
                     .FirstOrDefaultAsync(x =>
                         x.Id == id &&
                         !x.Eliminado &&
-                        (isAdmin || EF.Property<string>(x, "UsuarioCreacion") == uidStr)
+                        EF.Property<int>(x, "WorkshopId") == workshopId.Value
                     );
 
                 if (cliente == null)

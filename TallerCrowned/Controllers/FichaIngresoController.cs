@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FamilyApp.Controllers
 {
+    [Authorize]
     [Route("api/[controller]")]
     [ApiController]
     public class FichaIngresoController : ControllerBase
@@ -15,12 +16,20 @@ namespace FamilyApp.Controllers
 
         private readonly IRepository _repository;
         private readonly IWebHostEnvironment _env;
+        private readonly dbContext _context;
+        private readonly ICurrentWorkshopService _currentWorkshopService;
 
 
-        public FichaIngresoController(IRepository repository, IWebHostEnvironment env)
+        public FichaIngresoController(
+            IRepository repository,
+            IWebHostEnvironment env,
+            dbContext context,
+            ICurrentWorkshopService currentWorkshopService)
         {
            _repository = repository;
             _env = env;
+            _context = context;
+            _currentWorkshopService = currentWorkshopService;
      
         }
 
@@ -31,7 +40,13 @@ namespace FamilyApp.Controllers
             Respuesta<object> respuesta = new();
             try
             {
-                var fIngresos = await _repository.SelectAll<FichaIngreso>();
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
+
+                var fIngresos = await _context.FichaIngresos
+                    .AsNoTracking()
+                    .Where(x => EF.Property<int>(x, "WorkshopId") == workshopId.Value)
+                    .ToListAsync();
                 if (fIngresos != null)
                 {
                     foreach (var item in fIngresos)
@@ -57,22 +72,32 @@ namespace FamilyApp.Controllers
         }
 
         //POST: api/FichaEgreso
-        [Authorize]
         [HttpPost("Create")]
         public async Task<ActionResult> PostFichaIngreso(FichaIngreso fichaIngreso)
         {
             Respuesta<object> respuesta = new();
             try
             {
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
+
+                var tipoExiste = await _context.Ingresos.AnyAsync(x =>
+                    x.Id == fichaIngreso.NombreIngreso &&
+                    EF.Property<int>(x, "WorkshopId") == workshopId.Value);
+                if (!tipoExiste)
+                    return BadRequest(new { message = "El tipo de ingreso no pertenece al taller activo." });
+
                 // saneo básico (si lo necesitas)
                 fichaIngreso.Eliminado = false;
                 fichaIngreso.FechaEliminacion = null;
 
-                var newId = await _repository.CreateAsync(fichaIngreso);
+                _context.FichaIngresos.Add(fichaIngreso);
+                _context.Entry(fichaIngreso).Property("WorkshopId").CurrentValue = workshopId.Value;
+                await _context.SaveChangesAsync();
 
                 respuesta.Ok = 1;
                 respuesta.Message = "Success";
-                respuesta.Data.Add(new { Id = newId });
+                respuesta.Data.Add(new { fichaIngreso.Id });
                 return Ok(respuesta);
 
             }
