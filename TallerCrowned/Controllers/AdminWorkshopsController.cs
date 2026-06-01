@@ -42,6 +42,8 @@ namespace TallerCrowned.Controllers
                     x.Iban,
                     x.SerieFactura,
                     x.LogoPath,
+                    x.BusinessType,
+                    x.TerminologyProfile,
                     x.MaxUsers,
                     x.FooterText,
                     x.PrivacyPolicyText,
@@ -58,18 +60,21 @@ namespace TallerCrowned.Controllers
         public async Task<ActionResult> Create([FromBody] AdminWorkshopCreateDto dto)
         {
             if (dto == null) return BadRequest(new { message = "Body vacio." });
-            if (string.IsNullOrWhiteSpace(dto.Nombre)) return BadRequest(new { message = "El nombre del taller es requerido." });
+            if (string.IsNullOrWhiteSpace(dto.Nombre)) return BadRequest(new { message = "El nombre del negocio es requerido." });
             if (string.IsNullOrWhiteSpace(dto.RazonSocial)) return BadRequest(new { message = "La razon social es requerida." });
             if (string.IsNullOrWhiteSpace(dto.Nif)) return BadRequest(new { message = "El NIF/CIF es requerido." });
             if (string.IsNullOrWhiteSpace(dto.Direccion)) return BadRequest(new { message = "La direccion es requerida." });
 
             var nif = dto.Nif.Trim().ToUpperInvariant();
             var exists = await _context.Workshops.AnyAsync(x => x.Nif == nif);
-            if (exists) return Conflict(new { message = "Ya existe un taller con ese NIF/CIF." });
+            if (exists) return Conflict(new { message = "Ya existe un negocio con ese NIF/CIF." });
 
             var maxUsers = dto.MaxUsers.GetValueOrDefault(DefaultMaxUsers);
             if (maxUsers < 1 || maxUsers > DefaultMaxUsers)
-                return BadRequest(new { message = $"El maximo de usuarios por taller no puede superar {DefaultMaxUsers}." });
+                return BadRequest(new { message = $"El maximo de usuarios por negocio no puede superar {DefaultMaxUsers}." });
+
+            var businessType = NormalizeBusinessType(dto.BusinessType);
+            var terminologyProfile = NormalizeTerminologyProfile(dto.TerminologyProfile, businessType);
 
             await using var tx = await _context.Database.BeginTransactionAsync();
 
@@ -84,6 +89,8 @@ namespace TallerCrowned.Controllers
                 Iban = dto.Iban?.Trim(),
                 SerieFactura = string.IsNullOrWhiteSpace(dto.SerieFactura) ? "A" : dto.SerieFactura.Trim().ToUpperInvariant(),
                 LogoPath = dto.LogoPath?.Trim(),
+                BusinessType = businessType,
+                TerminologyProfile = terminologyProfile,
                 MaxUsers = maxUsers,
                 FooterText = dto.FooterText?.Trim(),
                 PrivacyPolicyText = dto.PrivacyPolicyText?.Trim(),
@@ -114,7 +121,7 @@ namespace TallerCrowned.Controllers
 
             await tx.CommitAsync();
 
-            return Ok(new { workshop.Id, workshop.Nombre, workshop.Nif, workshop.MaxUsers });
+            return Ok(new { workshop.Id, workshop.Nombre, workshop.Nif, workshop.BusinessType, workshop.TerminologyProfile, workshop.MaxUsers });
         }
 
         [HttpPost("{workshopId:int}/users")]
@@ -124,12 +131,12 @@ namespace TallerCrowned.Controllers
             if (string.IsNullOrWhiteSpace(dto.Email)) return BadRequest(new { message = "El email es requerido." });
 
             var workshop = await _context.Workshops.FirstOrDefaultAsync(x => x.Id == workshopId && x.Activo);
-            if (workshop == null) return NotFound(new { message = "No existe el taller." });
+            if (workshop == null) return NotFound(new { message = "No existe el negocio." });
 
             var activeUsers = await _context.WorkshopUsers.CountAsync(x => x.WorkshopId == workshopId && x.Activo);
             var maxUsers = workshop.MaxUsers <= 0 ? DefaultMaxUsers : workshop.MaxUsers;
             if (activeUsers >= maxUsers)
-                return BadRequest(new { message = $"Este taller ya tiene el maximo permitido de {maxUsers} usuarios activos." });
+                return BadRequest(new { message = $"Este negocio ya tiene el maximo permitido de {maxUsers} usuarios activos." });
 
             var user = await GetOrCreateUser(dto.Email, dto.Password, dto.FullName);
             if (user == null)
@@ -138,7 +145,7 @@ namespace TallerCrowned.Controllers
             var relation = await _context.WorkshopUsers.FirstOrDefaultAsync(x => x.WorkshopId == workshopId && x.UserId == user.Id);
             if (relation != null)
             {
-                if (relation.Activo) return Conflict(new { message = "El usuario ya pertenece a este taller." });
+                if (relation.Activo) return Conflict(new { message = "El usuario ya pertenece a este negocio." });
 
                 relation.Activo = true;
                 relation.Role = NormalizeWorkshopRole(dto.Role);
@@ -163,7 +170,7 @@ namespace TallerCrowned.Controllers
         public async Task<ActionResult> GetUsers(int workshopId)
         {
             var workshopExists = await _context.Workshops.AnyAsync(x => x.Id == workshopId);
-            if (!workshopExists) return NotFound(new { message = "No existe el taller." });
+            if (!workshopExists) return NotFound(new { message = "No existe el negocio." });
 
             var users = await _context.WorkshopUsers
                 .AsNoTracking()
@@ -197,7 +204,7 @@ namespace TallerCrowned.Controllers
         {
             var relation = await _context.WorkshopUsers
                 .FirstOrDefaultAsync(x => x.WorkshopId == workshopId && x.UserId == userId);
-            if (relation == null) return NotFound(new { message = "El usuario no pertenece a este taller." });
+            if (relation == null) return NotFound(new { message = "El usuario no pertenece a este negocio." });
 
             var user = await _context.Users.FirstOrDefaultAsync(x => x.Id == userId);
             if (user == null) return NotFound(new { message = "No existe el usuario." });
@@ -219,12 +226,12 @@ namespace TallerCrowned.Controllers
                 if (dto.WorkshopUserActive.Value)
                 {
                     var workshop = await _context.Workshops.AsNoTracking().FirstOrDefaultAsync(x => x.Id == workshopId);
-                    if (workshop == null) return NotFound(new { message = "No existe el taller." });
+                    if (workshop == null) return NotFound(new { message = "No existe el negocio." });
 
                     var activeUsers = await _context.WorkshopUsers.CountAsync(x => x.WorkshopId == workshopId && x.Activo);
                     var maxUsers = workshop.MaxUsers <= 0 ? DefaultMaxUsers : workshop.MaxUsers;
                     if (activeUsers >= maxUsers)
-                        return BadRequest(new { message = $"Este taller ya tiene el maximo permitido de {maxUsers} usuarios activos." });
+                        return BadRequest(new { message = $"Este negocio ya tiene el maximo permitido de {maxUsers} usuarios activos." });
                 }
 
                 relation.Activo = dto.WorkshopUserActive.Value;
@@ -255,7 +262,7 @@ namespace TallerCrowned.Controllers
         {
             var relation = await _context.WorkshopUsers
                 .FirstOrDefaultAsync(x => x.WorkshopId == workshopId && x.UserId == userId);
-            if (relation == null) return NotFound(new { message = "El usuario no pertenece a este taller." });
+            if (relation == null) return NotFound(new { message = "El usuario no pertenece a este negocio." });
 
             if (!relation.Activo)
                 return Ok(new { relation.UserId, relation.WorkshopId, relation.Activo });
@@ -270,12 +277,12 @@ namespace TallerCrowned.Controllers
         public async Task<ActionResult> UpdateLegal(int workshopId, [FromBody] AdminWorkshopLegalDto dto)
         {
             var workshop = await _context.Workshops.FirstOrDefaultAsync(x => x.Id == workshopId);
-            if (workshop == null) return NotFound(new { message = "No existe el taller." });
+            if (workshop == null) return NotFound(new { message = "No existe el negocio." });
 
             if (dto.MaxUsers.HasValue)
             {
                 if (dto.MaxUsers.Value < 1 || dto.MaxUsers.Value > DefaultMaxUsers)
-                    return BadRequest(new { message = $"El maximo de usuarios por taller no puede superar {DefaultMaxUsers}." });
+                    return BadRequest(new { message = $"El maximo de usuarios por negocio no puede superar {DefaultMaxUsers}." });
 
                 var activeUsers = await _context.WorkshopUsers.CountAsync(x => x.WorkshopId == workshopId && x.Activo);
                 if (activeUsers > dto.MaxUsers.Value)
@@ -287,9 +294,13 @@ namespace TallerCrowned.Controllers
             workshop.FooterText = dto.FooterText?.Trim();
             workshop.PrivacyPolicyText = dto.PrivacyPolicyText?.Trim();
             workshop.TermsText = dto.TermsText?.Trim();
+            if (dto.BusinessType != null)
+                workshop.BusinessType = NormalizeBusinessType(dto.BusinessType);
+            if (dto.TerminologyProfile != null)
+                workshop.TerminologyProfile = NormalizeTerminologyProfile(dto.TerminologyProfile, workshop.BusinessType);
 
             await _context.SaveChangesAsync();
-            return Ok(new { workshop.Id, workshop.MaxUsers });
+            return Ok(new { workshop.Id, workshop.BusinessType, workshop.TerminologyProfile, workshop.MaxUsers });
         }
 
         private async Task<AppUser?> GetOrCreateUser(string emailRaw, string? password, string? fullName)
@@ -328,6 +339,25 @@ namespace TallerCrowned.Controllers
             if (currentRole == "superadmin" && clean != "superadmin") return currentRole;
             return clean is "superadmin" or "admin" or "user" ? clean : "user";
         }
+
+        private static string NormalizeBusinessType(string? type)
+        {
+            var clean = string.IsNullOrWhiteSpace(type) ? "automotive" : type.Trim().ToLowerInvariant();
+            return clean is "automotive" or "technical_services" or "generic_services" or "invoice_only"
+                ? clean
+                : "automotive";
+        }
+
+        private static string NormalizeTerminologyProfile(string? profile, string businessType)
+        {
+            var clean = string.IsNullOrWhiteSpace(profile) ? "" : profile.Trim().ToLowerInvariant();
+            if (clean is "automotive" or "equipment_service" or "generic_service")
+                return clean;
+
+            return businessType is "technical_services" or "generic_services"
+                ? "equipment_service"
+                : "automotive";
+        }
     }
 
     public class AdminWorkshopCreateDto
@@ -341,6 +371,8 @@ namespace TallerCrowned.Controllers
         public string? Iban { get; set; }
         public string? SerieFactura { get; set; }
         public string? LogoPath { get; set; }
+        public string? BusinessType { get; set; }
+        public string? TerminologyProfile { get; set; }
         public int? MaxUsers { get; set; }
         public string? FooterText { get; set; }
         public string? PrivacyPolicyText { get; set; }
@@ -371,6 +403,8 @@ namespace TallerCrowned.Controllers
     public class AdminWorkshopLegalDto
     {
         public int? MaxUsers { get; set; }
+        public string? BusinessType { get; set; }
+        public string? TerminologyProfile { get; set; }
         public string? FooterText { get; set; }
         public string? PrivacyPolicyText { get; set; }
         public string? TermsText { get; set; }

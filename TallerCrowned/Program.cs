@@ -33,8 +33,16 @@ builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
 // CORS
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("ProdCors", p => p
-        .WithOrigins(
+    var configuredProdOrigins = builder.Configuration
+        .GetSection("Cors:AllowedOrigins")
+        .Get<string[]>()?
+        .Where(origin => !string.IsNullOrWhiteSpace(origin))
+        .ToArray();
+
+    var prodOrigins = configuredProdOrigins is { Length: > 0 }
+        ? configuredProdOrigins
+        : new[]
+        {
             "https://invoice.familyapp.store",
             "https://familyapp.store",
             "https://www.familyapp.store",
@@ -43,7 +51,10 @@ builder.Services.AddCors(options =>
             "https://tallercrowned.store",
             "https://www.tallercrowned.store",
             "https://www.invoice.tallercrowned.store"
-        )
+        };
+
+    options.AddPolicy("ProdCors", p => p
+        .WithOrigins(prodOrigins)
         .AllowAnyHeader()
         .AllowAnyMethod()
         .AllowCredentials());

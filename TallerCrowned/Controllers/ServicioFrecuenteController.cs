@@ -174,16 +174,17 @@ namespace TallerCrowned.Controllers
 
         private async Task EnsureDefaults(int workshopId)
         {
-            var existing = await _context.ServiciosFrecuentes
-                .Where(x => EF.Property<int>(x, "WorkshopId") == workshopId)
-                .Select(x => x.Nombre.ToLower())
-                .ToListAsync();
+            var existingCount = await _context.ServiciosFrecuentes
+                .CountAsync(x =>
+                    !x.Eliminado &&
+                    EF.Property<int>(x, "WorkshopId") == workshopId
+                );
+
+            if (existingCount > 0)
+                return;
 
             foreach (var service in DefaultServices)
             {
-                if (existing.Contains(service.ToLower()))
-                    continue;
-
                 var servicio = new ServicioFrecuente
                 {
                     Nombre = service,

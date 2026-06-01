@@ -66,6 +66,8 @@ namespace TallerCrowned.Controllers
                 SerieFactura = section["SerieFactura"] ?? "A",
                 LogoPath = section["LogoPath"],
                 LogoUrl = ToLogoUrl(section["LogoPath"]),
+                BusinessType = section["BusinessType"] ?? "automotive",
+                TerminologyProfile = section["TerminologyProfile"] ?? "automotive",
                 MaxUsers = 3,
                 FooterText = "© App Multitaller. Todos los derechos reservados.",
                 PrivacyPolicyText = null,
@@ -105,6 +107,8 @@ namespace TallerCrowned.Controllers
                 SerieFactura = workshop.SerieFactura,
                 LogoPath = workshop.LogoPath,
                 LogoUrl = ToLogoUrl(workshop.LogoPath),
+                BusinessType = string.IsNullOrWhiteSpace(workshop.BusinessType) ? "automotive" : workshop.BusinessType,
+                TerminologyProfile = string.IsNullOrWhiteSpace(workshop.TerminologyProfile) ? "automotive" : workshop.TerminologyProfile,
                 MaxUsers = workshop.MaxUsers,
                 FooterText = workshop.FooterText,
                 PrivacyPolicyText = workshop.PrivacyPolicyText,
@@ -136,6 +140,8 @@ namespace TallerCrowned.Controllers
         public string SerieFactura { get; set; } = "A";
         public string? LogoPath { get; set; }
         public string? LogoUrl { get; set; }
+        public string BusinessType { get; set; } = "automotive";
+        public string TerminologyProfile { get; set; } = "automotive";
         public int MaxUsers { get; set; } = 3;
         public string? FooterText { get; set; }
         public string? PrivacyPolicyText { get; set; }

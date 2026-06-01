@@ -179,6 +179,18 @@ public partial class dbContext : DbContext
                 .HasMaxLength(300)
                 .IsUnicode(false);
 
+            b.Property(x => x.BusinessType)
+                .HasMaxLength(50)
+                .IsUnicode(false)
+                .HasDefaultValue("automotive")
+                .IsRequired();
+
+            b.Property(x => x.TerminologyProfile)
+                .HasMaxLength(50)
+                .IsUnicode(false)
+                .HasDefaultValue("automotive")
+                .IsRequired();
+
             b.Property(x => x.MaxUsers)
                 .HasDefaultValue(3)
                 .IsRequired();

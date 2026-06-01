@@ -12,6 +12,8 @@ namespace TallerCrowned.Models
         public string? Iban { get; set; }
         public string SerieFactura { get; set; } = "A";
         public string? LogoPath { get; set; }
+        public string BusinessType { get; set; } = "automotive";
+        public string TerminologyProfile { get; set; } = "automotive";
         public int MaxUsers { get; set; } = 3;
         public string? FooterText { get; set; }
         public string? PrivacyPolicyText { get; set; }

@@ -1127,6 +1127,22 @@ namespace FamilyApp.Migrations
                         .IsUnicode(false)
                         .HasColumnType("varchar(300)");
 
+                    b.Property<string>("BusinessType")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(50)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(50)")
+                        .HasDefaultValue("automotive");
+
+                    b.Property<string>("TerminologyProfile")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(50)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(50)")
+                        .HasDefaultValue("automotive");
+
                     b.Property<string>("Nif")
                         .IsRequired()
                         .HasMaxLength(30)
