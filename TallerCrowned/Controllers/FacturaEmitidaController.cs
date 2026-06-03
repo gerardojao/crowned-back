@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
 using System.Globalization;
+using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -108,11 +109,14 @@ namespace TallerCrowned.Controllers
                 if (existe)
                     return BadRequest(new { message = "Ya existe una factura emitida con ese numero." });
 
-                var subtotal = Round2(items.Sum(x => x.Cantidad * x.Importe));
                 var ivaPct = dto.IvaPct <= 0 ? 21 : dto.IvaPct;
-                var iva = Round2(subtotal * (ivaPct / 100m));
                 var otros = Round2(dto.Otros);
-                var total = Round2(subtotal + iva - otros);
+                var totalConIva = Round2(items.Sum(x => x.Cantidad * x.Importe));
+                var total = Round2(Math.Max(0, totalConIva - otros));
+                var subtotal = ivaPct > 0
+                    ? Round2(total / (1 + (ivaPct / 100m)))
+                    : total;
+                var iva = Round2(total - subtotal);
                 var itemsJson = JsonSerializer.Serialize(
                     items,
                     new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }
@@ -459,6 +463,50 @@ namespace TallerCrowned.Controllers
             }
         }
 
+        [HttpGet("exportar")]
+        public async Task<ActionResult> ExportarPorPeriodo([FromQuery] DateTime fechaInicio, [FromQuery] DateTime fechaFin)
+        {
+            if (fechaFin.Date < fechaInicio.Date)
+                return BadRequest(new { message = "La fecha fin no puede ser menor que la fecha inicio." });
+
+            var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+            if (!workshopId.HasValue) return Forbid();
+
+            var desde = fechaInicio.Date;
+            var hastaExcl = fechaFin.Date.AddDays(1);
+
+            var facturas = await _context.FacturasEmitidas
+                .AsNoTracking()
+                .Where(x =>
+                    !x.Eliminado &&
+                    EF.Property<int>(x, "WorkshopId") == workshopId.Value &&
+                    x.Fecha >= desde &&
+                    x.Fecha < hastaExcl)
+                .OrderBy(x => x.Fecha)
+                .ThenBy(x => x.NumeroFactura)
+                .ToListAsync();
+
+            if (facturas.Count == 0)
+                return NotFound(new { message = "No hay facturas emitidas en el periodo seleccionado." });
+
+            await using var zipStream = new MemoryStream();
+            using (var archive = new ZipArchive(zipStream, ZipArchiveMode.Create, leaveOpen: true))
+            {
+                foreach (var factura in facturas)
+                {
+                    var entryName = $"{SafeFileName(factura.NumeroFactura)}_{factura.Fecha:yyyyMMdd}.pdf";
+                    var entry = archive.CreateEntry(entryName, CompressionLevel.Fastest);
+
+                    await using var entryStream = entry.Open();
+                    var pdfBytes = BuildInvoicePdf(factura);
+                    await entryStream.WriteAsync(pdfBytes);
+                }
+            }
+
+            var fileName = $"facturas-{fechaInicio:yyyyMMdd}-a-{fechaFin:yyyyMMdd}.zip";
+            return File(zipStream.ToArray(), "application/zip", fileName);
+        }
+
         private string GetOwnerKey()
         {
             return _currentUserService.UserIdInt?.ToString()
@@ -480,6 +528,147 @@ namespace TallerCrowned.Controllers
         private static decimal Round2(decimal value)
         {
             return Math.Round(value, 2, MidpointRounding.AwayFromZero);
+        }
+
+        private static byte[] BuildInvoicePdf(FacturaEmitida factura)
+        {
+            var items = DeserializeItems(factura.ItemsJson);
+            var ivaPct = factura.Subtotal > 0
+                ? Math.Round((factura.Iva / factura.Subtotal) * 100, 2)
+                : 0;
+
+            var lines = new List<string>
+            {
+                "FACTURA",
+                $"Numero: {factura.NumeroFactura}",
+                $"Fecha: {factura.Fecha:dd/MM/yyyy}",
+                "",
+                "Cliente",
+                $"Nombre: {factura.Cliente}",
+                $"DNI/NIE/NIF: {factura.Dni ?? ""}",
+                $"Direccion: {factura.DireccionCliente ?? ""}",
+                $"Telefono: {factura.TelefonoCliente ?? ""}",
+                $"Referencia: {factura.Matricula ?? ""}",
+                $"Km: {factura.Km ?? ""}",
+                "",
+                "Conceptos"
+            };
+
+            foreach (var item in items)
+            {
+                var totalLinea = Round2(item.Cantidad * item.Importe);
+                lines.Add($"{item.Descripcion} | Cant.: {item.Cantidad:0.##} | Importe IVA incl.: {totalLinea:0.00} EUR");
+            }
+
+            lines.Add("");
+            lines.Add($"Base imponible: {factura.Subtotal:0.00} EUR");
+            lines.Add($"IVA ({ivaPct:0.##}%): {factura.Iva:0.00} EUR");
+            if (factura.Otros > 0)
+                lines.Add($"Otros/descuento: -{factura.Otros:0.00} EUR");
+            lines.Add($"TOTAL: {factura.Total:0.00} EUR");
+
+            if (!string.IsNullOrWhiteSpace(factura.Observaciones))
+            {
+                lines.Add("");
+                lines.Add("Observaciones");
+                lines.Add(factura.Observaciones);
+            }
+
+            return SimplePdf(lines);
+        }
+
+        private static byte[] SimplePdf(IReadOnlyList<string> lines)
+        {
+            var content = new StringBuilder();
+            content.AppendLine("BT");
+            content.AppendLine("/F1 11 Tf");
+            content.AppendLine("50 790 Td");
+
+            foreach (var rawLine in lines)
+            {
+                foreach (var line in WrapLine(rawLine ?? "", 92))
+                {
+                    content.AppendLine($"({PdfEscape(line)}) Tj");
+                    content.AppendLine("0 -16 Td");
+                }
+            }
+
+            content.AppendLine("ET");
+
+            var contentBytes = Encoding.GetEncoding("ISO-8859-1").GetBytes(content.ToString());
+            var objects = new List<byte[]>
+            {
+                Encoding.ASCII.GetBytes("<< /Type /Catalog /Pages 2 0 R >>"),
+                Encoding.ASCII.GetBytes("<< /Type /Pages /Kids [3 0 R] /Count 1 >>"),
+                Encoding.ASCII.GetBytes("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>"),
+                Encoding.ASCII.GetBytes("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"),
+                Combine(
+                    Encoding.ASCII.GetBytes($"<< /Length {contentBytes.Length} >>\nstream\n"),
+                    contentBytes,
+                    Encoding.ASCII.GetBytes("\nendstream"))
+            };
+
+            using var ms = new MemoryStream();
+            WriteAscii(ms, "%PDF-1.4\n");
+            var offsets = new List<long> { 0 };
+
+            for (var i = 0; i < objects.Count; i++)
+            {
+                offsets.Add(ms.Position);
+                WriteAscii(ms, $"{i + 1} 0 obj\n");
+                ms.Write(objects[i]);
+                WriteAscii(ms, "\nendobj\n");
+            }
+
+            var xref = ms.Position;
+            WriteAscii(ms, $"xref\n0 {objects.Count + 1}\n");
+            WriteAscii(ms, "0000000000 65535 f \n");
+            foreach (var offset in offsets.Skip(1))
+                WriteAscii(ms, $"{offset:0000000000} 00000 n \n");
+            WriteAscii(ms, $"trailer\n<< /Size {objects.Count + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF");
+
+            return ms.ToArray();
+        }
+
+        private static IEnumerable<string> WrapLine(string text, int maxLength)
+        {
+            if (string.IsNullOrEmpty(text))
+            {
+                yield return "";
+                yield break;
+            }
+
+            for (var i = 0; i < text.Length; i += maxLength)
+                yield return text.Substring(i, Math.Min(maxLength, text.Length - i));
+        }
+
+        private static string PdfEscape(string text)
+        {
+            return text
+                .Replace("\\", "\\\\")
+                .Replace("(", "\\(")
+                .Replace(")", "\\)");
+        }
+
+        private static string SafeFileName(string value)
+        {
+            var invalid = Path.GetInvalidFileNameChars();
+            var clean = new string((value ?? "factura").Select(ch => invalid.Contains(ch) ? '_' : ch).ToArray());
+            return string.IsNullOrWhiteSpace(clean) ? "factura" : clean;
+        }
+
+        private static byte[] Combine(params byte[][] parts)
+        {
+            using var ms = new MemoryStream();
+            foreach (var part in parts)
+                ms.Write(part);
+            return ms.ToArray();
+        }
+
+        private static void WriteAscii(Stream stream, string text)
+        {
+            var bytes = Encoding.ASCII.GetBytes(text);
+            stream.Write(bytes);
         }
     }
 

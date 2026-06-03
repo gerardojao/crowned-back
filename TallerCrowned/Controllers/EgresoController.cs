@@ -52,7 +52,8 @@ namespace FamilyApp.Controllers
                         respuesta.Data.Add(new
                         {
                             item.Id,
-                            item.Nombre
+                            item.Nombre,
+                            item.TipoGasto
                         });
                     }
                     respuesta.Ok = 1;
@@ -88,17 +89,18 @@ namespace FamilyApp.Controllers
                                    join _fEgreso in _context.FichaEgresos on _Egreso.Id equals _fEgreso.NombreEgreso
                                    where !_fEgreso.Eliminado &&
                                    EF.Property<int>(_fEgreso, "WorkshopId") == workshopId.Value
-                                   select new { _Egreso.Nombre, _fEgreso.Importe })
+                                   select new { _Egreso.Nombre, _Egreso.TipoGasto, _fEgreso.Importe })
                                   .OrderByDescending(x => x.Importe)
                                   .ToListAsync();
 
                 if (ingre != null)
                 {
                     var ingreT = from i in ingre
-                                 group i by i.Nombre into totals
+                                 group i by new { i.Nombre, i.TipoGasto } into totals
                                  select new
                                  {
-                                     Cuenta_Egreso = totals.Key,
+                                     Cuenta_Egreso = totals.Key.Nombre,
+                                     TipoGasto = totals.Key.TipoGasto,
                                      Total = totals.Sum(e => e.Importe)
                                  };
                     respuesta.Data.Add(ingreT);
@@ -304,6 +306,7 @@ namespace FamilyApp.Controllers
                               Mes = f.Mes,
                               TipoId = e.Id,
                               Tipo = e.Nombre,
+                              TipoGasto = e.TipoGasto,
                               Descripcion = f.Descripcion,
                               Importe = f.Importe
                           })
@@ -348,8 +351,8 @@ namespace FamilyApp.Controllers
                                       && f.Fecha.HasValue
                                       && f.Fecha.Value >= fi
                                       && f.Fecha.Value < ffExcl
-                                   group f by e.Nombre into g
-                                   select new { Cuenta_Egreso = g.Key, Total = g.Sum(x => x.Importe) })
+                                   group f by new { e.Nombre, e.TipoGasto } into g
+                                   select new { Cuenta_Egreso = g.Key.Nombre, TipoGasto = g.Key.TipoGasto, Total = g.Sum(x => x.Importe) })
                                   .OrderByDescending(x => x.Total)
                                   .ToListAsync();
 
@@ -377,6 +380,7 @@ namespace FamilyApp.Controllers
                 var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
                 if (!workshopId.HasValue) return Forbid();
 
+                egreso.TipoGasto = NormalizeTipoGasto(egreso.TipoGasto);
                 _context.Egresos.Add(egreso);
                 _context.Entry(egreso).Property("WorkshopId").CurrentValue = workshopId.Value;
                 await _context.SaveChangesAsync();
@@ -420,6 +424,7 @@ namespace FamilyApp.Controllers
                     return BadRequest(new { message = "El nombre del egreso es requerido." });
 
                 egreso.Nombre = dto.Nombre.Trim();
+                egreso.TipoGasto = NormalizeTipoGasto(dto.TipoGasto);
 
                 await _context.SaveChangesAsync();
 
@@ -428,7 +433,8 @@ namespace FamilyApp.Controllers
                 respuesta.Data.Add(new
                 {
                     egreso.Id,
-                    egreso.Nombre
+                    egreso.Nombre,
+                    egreso.TipoGasto
                 });
 
                 return Ok(respuesta);
@@ -484,7 +490,8 @@ namespace FamilyApp.Controllers
                 respuesta.Data.Add(new
                 {
                     egreso.Id,
-                    egreso.Nombre
+                    egreso.Nombre,
+                    egreso.TipoGasto
                 });
 
                 return Ok(respuesta);
@@ -497,5 +504,10 @@ namespace FamilyApp.Controllers
             }
         }
 
+        private static string NormalizeTipoGasto(string? tipo)
+        {
+            var clean = (tipo ?? "variable").Trim().ToLowerInvariant();
+            return clean == "fijo" ? "fijo" : "variable";
+        }
     }
 }

@@ -9,5 +9,7 @@ public partial class Egreso
 
     public string Nombre { get; set; } = null!;
 
+    public string TipoGasto { get; set; } = "variable";
+
     //public virtual ICollection<FichaEgreso> FichaEgresos { get; } = new List<FichaEgreso>();
 }

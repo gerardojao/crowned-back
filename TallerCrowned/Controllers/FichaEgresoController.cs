@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using FamilyApp.DTOs.Egresos;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
+using System.Globalization;
 
 namespace FamilyApp.Controllers
 {
@@ -75,7 +76,7 @@ namespace FamilyApp.Controllers
 
         // POST: api/FichaEgreso
         [HttpPost]
-        public async Task<ActionResult> PostFichaEgreso([FromBody] FichaEgreso fichaEgreso)
+        public async Task<ActionResult> PostFichaEgreso([FromBody] FichaEgresoCreateDTO dto)
         {
             var respuesta = new Respuesta<object>();
             try
@@ -84,14 +85,29 @@ namespace FamilyApp.Controllers
                 if (!workshopId.HasValue) return Forbid();
 
                 var tipoExiste = await _context.Egresos.AnyAsync(x =>
-                    x.Id == fichaEgreso.NombreEgreso &&
+                    x.Id == dto.NombreEgreso &&
                     EF.Property<int>(x, "WorkshopId") == workshopId.Value);
                 if (!tipoExiste)
                     return BadRequest(new { message = "El tipo de gasto no pertenece al taller activo." });
 
-                // saneo básico (si lo necesitas)
-                fichaEgreso.Eliminado = false;
-                fichaEgreso.FechaEliminacion = null;
+                var fecha = dto.Fecha ?? DateTime.UtcNow;
+
+                if (dto.Importe <= 0)
+                    return BadRequest(new { message = "El importe debe ser mayor que 0." });
+
+                var fichaEgreso = new FichaEgreso
+                {
+                    Foto = dto.Foto,
+                    Fecha = fecha,
+                    Mes = string.IsNullOrWhiteSpace(dto.Mes)
+                        ? fecha.ToString("MMMM", new CultureInfo("es-ES"))
+                        : dto.Mes.Trim(),
+                    NombreEgreso = dto.NombreEgreso,
+                    Descripcion = dto.Descripcion?.Trim(),
+                    Importe = dto.Importe,
+                    Eliminado = false,
+                    FechaEliminacion = null
+                };
 
                 _context.FichaEgresos.Add(fichaEgreso);
                 _context.Entry(fichaEgreso).Property("WorkshopId").CurrentValue = workshopId.Value;
@@ -132,7 +148,12 @@ namespace FamilyApp.Controllers
                 }
 
                 // Patch: solo asigna lo que venga en el DTO
-                if (dto.Fecha.HasValue) fe.Fecha = dto.Fecha;
+                if (dto.Fecha.HasValue)
+                {
+                    fe.Fecha = dto.Fecha;
+                    if (string.IsNullOrWhiteSpace(dto.Mes))
+                        fe.Mes = dto.Fecha.Value.ToString("MMMM", new CultureInfo("es-ES"));
+                }
                 if (!string.IsNullOrWhiteSpace(dto.Mes)) fe.Mes = dto.Mes;
                 if (dto.NombreEgreso.HasValue)
                 {
@@ -203,5 +224,15 @@ namespace FamilyApp.Controllers
         }
 
 
+    }
+
+    public class FichaEgresoCreateDTO
+    {
+        public string? Foto { get; set; }
+        public DateTime? Fecha { get; set; }
+        public string? Mes { get; set; }
+        public int NombreEgreso { get; set; }
+        public string? Descripcion { get; set; }
+        public decimal Importe { get; set; }
     }
 }

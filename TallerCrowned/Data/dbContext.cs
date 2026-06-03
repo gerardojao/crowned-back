@@ -244,6 +244,7 @@ public partial class dbContext : DbContext
         modelBuilder.Entity<Egreso>(entity =>
         {
             entity.Property(e => e.Nombre).HasMaxLength(100).IsUnicode(false);
+            entity.Property(e => e.TipoGasto).HasMaxLength(20).IsUnicode(false).HasDefaultValue("variable");
             ConfigureWorkshopShadow<Egreso>(entity);
         });
 
