@@ -1,4 +1,4 @@
-
+﻿
 
 namespace FamilyApp.Models { 
     public class Respuesta<T>
@@ -10,7 +10,7 @@ namespace FamilyApp.Models {
     }
     public class Enlace
     {
-        public string Url { get; set; }
+        public string Url { get; set; } = string.Empty;
     }
 
 }

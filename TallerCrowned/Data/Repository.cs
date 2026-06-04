@@ -1,4 +1,4 @@
-using FamilyApp.Controllers;
+﻿using FamilyApp.Controllers;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
@@ -28,7 +28,7 @@ namespace FamilyApp.Data
         {
             _dbContext.Set<T>().Add(entity);
             await _dbContext.SaveChangesAsync();
-            return entity; // EF ya rellen� la PK
+            return entity; // EF ya rellenó la PK
         }
 
 
@@ -38,7 +38,7 @@ namespace FamilyApp.Data
             _ = await this._dbContext.SaveChangesAsync();
         }
 
-        public async Task<T> SelectById<T>(int Id) where T : class
+        public async Task<T?> SelectById<T>(int Id) where T : class
         {
             return await this._dbContext.Set<T>().FindAsync(Id);
         }
@@ -58,3 +58,4 @@ namespace FamilyApp.Data
 
     }
 }
+
