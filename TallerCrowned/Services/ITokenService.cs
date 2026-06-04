@@ -18,7 +18,13 @@ namespace FamilyApp.Services
 
         public string CreateToken(AppUser user, Guid jti, out DateTime expiresAt)
         {
-            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_cfg["Jwt:Key"]!));
+            var jwtKey = _cfg["Jwt:Key"];
+            if (string.IsNullOrWhiteSpace(jwtKey))
+            {
+                throw new InvalidOperationException("Missing required configuration value: Jwt:Key. Set it with the Jwt__Key environment variable in production.");
+            }
+
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
             var issuer = _cfg["Jwt:Issuer"];

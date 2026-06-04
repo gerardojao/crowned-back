@@ -12,6 +12,11 @@ var builder = WebApplication.CreateBuilder(args);
 
 // ========= 1) SERVICES (ANTES del Build) =========
 var env = builder.Environment; // <- úsalo en AddJwtBearer
+var jwtKey = builder.Configuration["Jwt:Key"];
+if (string.IsNullOrWhiteSpace(jwtKey))
+{
+    throw new InvalidOperationException("Missing required configuration value: Jwt:Key. Set it with the Jwt__Key environment variable in production.");
+}
 
 builder.Services.AddControllers();
 
@@ -91,7 +96,7 @@ builder.Services
             ValidAudience = builder.Configuration["Jwt:Audience"],
             ValidateIssuerSigningKey = true,
             IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!)
+                Encoding.UTF8.GetBytes(jwtKey)
             ),
             ValidateLifetime = true,
             ClockSkew = TimeSpan.Zero,
