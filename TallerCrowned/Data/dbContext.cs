@@ -204,6 +204,18 @@ public partial class dbContext : DbContext
             b.Property(x => x.TermsText)
                 .HasColumnType("nvarchar(max)");
 
+            b.Property(x => x.EnableWhatsappAlerts)
+                .HasDefaultValue(true)
+                .IsRequired();
+
+            b.Property(x => x.EnableInvoiceExport)
+                .HasDefaultValue(true)
+                .IsRequired();
+
+            b.Property(x => x.EnableProfitAndLoss)
+                .HasDefaultValue(true)
+                .IsRequired();
+
             b.Property(x => x.Activo).HasDefaultValue(true);
             b.Property(x => x.FechaCreacion).HasColumnType("datetime");
 

@@ -48,6 +48,9 @@ namespace TallerCrowned.Controllers
                     x.FooterText,
                     x.PrivacyPolicyText,
                     x.TermsText,
+                    x.EnableWhatsappAlerts,
+                    x.EnableInvoiceExport,
+                    x.EnableProfitAndLoss,
                     ActiveUsers = _context.WorkshopUsers.Count(wu => wu.WorkshopId == x.Id && wu.Activo),
                     x.Activo
                 })
@@ -95,6 +98,9 @@ namespace TallerCrowned.Controllers
                 FooterText = dto.FooterText?.Trim(),
                 PrivacyPolicyText = dto.PrivacyPolicyText?.Trim(),
                 TermsText = dto.TermsText?.Trim(),
+                EnableWhatsappAlerts = dto.EnableWhatsappAlerts.GetValueOrDefault(true),
+                EnableInvoiceExport = dto.EnableInvoiceExport.GetValueOrDefault(true),
+                EnableProfitAndLoss = dto.EnableProfitAndLoss.GetValueOrDefault(true),
                 Activo = true,
                 FechaCreacion = DateTime.UtcNow
             };
@@ -294,6 +300,12 @@ namespace TallerCrowned.Controllers
             workshop.FooterText = dto.FooterText?.Trim();
             workshop.PrivacyPolicyText = dto.PrivacyPolicyText?.Trim();
             workshop.TermsText = dto.TermsText?.Trim();
+            if (dto.EnableWhatsappAlerts.HasValue)
+                workshop.EnableWhatsappAlerts = dto.EnableWhatsappAlerts.Value;
+            if (dto.EnableInvoiceExport.HasValue)
+                workshop.EnableInvoiceExport = dto.EnableInvoiceExport.Value;
+            if (dto.EnableProfitAndLoss.HasValue)
+                workshop.EnableProfitAndLoss = dto.EnableProfitAndLoss.Value;
             if (dto.BusinessType != null)
                 workshop.BusinessType = NormalizeBusinessType(dto.BusinessType);
             if (dto.TerminologyProfile != null)
@@ -377,6 +389,9 @@ namespace TallerCrowned.Controllers
         public string? FooterText { get; set; }
         public string? PrivacyPolicyText { get; set; }
         public string? TermsText { get; set; }
+        public bool? EnableWhatsappAlerts { get; set; }
+        public bool? EnableInvoiceExport { get; set; }
+        public bool? EnableProfitAndLoss { get; set; }
         public string? OwnerEmail { get; set; }
         public string? OwnerPassword { get; set; }
         public string? OwnerFullName { get; set; }
@@ -408,5 +423,8 @@ namespace TallerCrowned.Controllers
         public string? FooterText { get; set; }
         public string? PrivacyPolicyText { get; set; }
         public string? TermsText { get; set; }
+        public bool? EnableWhatsappAlerts { get; set; }
+        public bool? EnableInvoiceExport { get; set; }
+        public bool? EnableProfitAndLoss { get; set; }
     }
 }

@@ -71,7 +71,10 @@ namespace TallerCrowned.Controllers
                 MaxUsers = 3,
                 FooterText = "© App Multitaller. Todos los derechos reservados.",
                 PrivacyPolicyText = null,
-                TermsText = null
+                TermsText = null,
+                EnableWhatsappAlerts = true,
+                EnableInvoiceExport = true,
+                EnableProfitAndLoss = true
             });
         }
 
@@ -112,7 +115,10 @@ namespace TallerCrowned.Controllers
                 MaxUsers = workshop.MaxUsers,
                 FooterText = workshop.FooterText,
                 PrivacyPolicyText = workshop.PrivacyPolicyText,
-                TermsText = workshop.TermsText
+                TermsText = workshop.TermsText,
+                EnableWhatsappAlerts = workshop.EnableWhatsappAlerts,
+                EnableInvoiceExport = workshop.EnableInvoiceExport,
+                EnableProfitAndLoss = workshop.EnableProfitAndLoss
             };
         }
 
@@ -146,5 +152,8 @@ namespace TallerCrowned.Controllers
         public string? FooterText { get; set; }
         public string? PrivacyPolicyText { get; set; }
         public string? TermsText { get; set; }
+        public bool EnableWhatsappAlerts { get; set; } = true;
+        public bool EnableInvoiceExport { get; set; } = true;
+        public bool EnableProfitAndLoss { get; set; } = true;
     }
 }

@@ -18,6 +18,9 @@ namespace TallerCrowned.Models
         public string? FooterText { get; set; }
         public string? PrivacyPolicyText { get; set; }
         public string? TermsText { get; set; }
+        public bool EnableWhatsappAlerts { get; set; } = true;
+        public bool EnableInvoiceExport { get; set; } = true;
+        public bool EnableProfitAndLoss { get; set; } = true;
         public bool Activo { get; set; } = true;
         public DateTime FechaCreacion { get; set; } = DateTime.UtcNow;
     }
