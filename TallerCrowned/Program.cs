@@ -173,7 +173,10 @@ builder.Services.AddSwaggerGen(c =>
 var app = builder.Build();
 
 // ========= 3) MIDDLEWARE (DESPUÉS del Build) =========
-if (app.Environment.IsDevelopment())
+var swaggerEnabled = app.Environment.IsDevelopment()
+    || app.Configuration.GetValue<bool>("Swagger:Enabled");
+
+if (swaggerEnabled)
 {
     app.UseSwagger();
     app.UseSwaggerUI();
