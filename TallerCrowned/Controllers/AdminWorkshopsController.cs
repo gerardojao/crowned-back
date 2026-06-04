@@ -300,6 +300,31 @@ namespace TallerCrowned.Controllers
             workshop.FooterText = dto.FooterText?.Trim();
             workshop.PrivacyPolicyText = dto.PrivacyPolicyText?.Trim();
             workshop.TermsText = dto.TermsText?.Trim();
+            if (!string.IsNullOrWhiteSpace(dto.Nombre))
+                workshop.Nombre = dto.Nombre.Trim();
+            if (!string.IsNullOrWhiteSpace(dto.RazonSocial))
+                workshop.RazonSocial = dto.RazonSocial.Trim();
+            if (!string.IsNullOrWhiteSpace(dto.Nif))
+            {
+                var nif = dto.Nif.Trim().ToUpperInvariant();
+                var exists = await _context.Workshops.AnyAsync(x => x.Id != workshopId && x.Nif == nif);
+                if (exists) return Conflict(new { message = "Ya existe otro negocio con ese NIF/CIF." });
+                workshop.Nif = nif;
+            }
+            if (!string.IsNullOrWhiteSpace(dto.Direccion))
+                workshop.Direccion = dto.Direccion.Trim();
+            if (dto.Telefono != null)
+                workshop.Telefono = string.IsNullOrWhiteSpace(dto.Telefono) ? null : dto.Telefono.Trim();
+            if (dto.Email != null)
+                workshop.Email = string.IsNullOrWhiteSpace(dto.Email) ? null : dto.Email.Trim();
+            if (dto.Iban != null)
+                workshop.Iban = string.IsNullOrWhiteSpace(dto.Iban) ? null : dto.Iban.Trim();
+            if (dto.SerieFactura != null)
+                workshop.SerieFactura = string.IsNullOrWhiteSpace(dto.SerieFactura) ? "A" : dto.SerieFactura.Trim().ToUpperInvariant();
+            if (dto.LogoPath != null)
+                workshop.LogoPath = string.IsNullOrWhiteSpace(dto.LogoPath) ? null : dto.LogoPath.Trim();
+            if (dto.Activo.HasValue)
+                workshop.Activo = dto.Activo.Value;
             if (dto.EnableWhatsappAlerts.HasValue)
                 workshop.EnableWhatsappAlerts = dto.EnableWhatsappAlerts.Value;
             if (dto.EnableInvoiceExport.HasValue)
@@ -417,6 +442,16 @@ namespace TallerCrowned.Controllers
 
     public class AdminWorkshopLegalDto
     {
+        public string? Nombre { get; set; }
+        public string? RazonSocial { get; set; }
+        public string? Nif { get; set; }
+        public string? Direccion { get; set; }
+        public string? Telefono { get; set; }
+        public string? Email { get; set; }
+        public string? Iban { get; set; }
+        public string? SerieFactura { get; set; }
+        public string? LogoPath { get; set; }
+        public bool? Activo { get; set; }
         public int? MaxUsers { get; set; }
         public string? BusinessType { get; set; }
         public string? TerminologyProfile { get; set; }

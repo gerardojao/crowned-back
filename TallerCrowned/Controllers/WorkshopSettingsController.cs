@@ -85,6 +85,18 @@ namespace TallerCrowned.Controllers
             if (!uid.HasValue)
                 return Unauthorized();
 
+            if (User.IsInRole("superadmin"))
+            {
+                var allWorkshops = await _context.Workshops
+                    .AsNoTracking()
+                    .Where(x => x.Activo)
+                    .OrderBy(x => x.Nombre)
+                    .Select(x => ToDto(x))
+                    .ToListAsync();
+
+                return Ok(allWorkshops);
+            }
+
             var workshops = await _context.WorkshopUsers
                 .AsNoTracking()
                 .Where(x => x.UserId == uid.Value && x.Activo && x.Workshop.Activo)

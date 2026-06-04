@@ -33,6 +33,16 @@ public class CurrentWorkshopService : ICurrentWorkshopService
         if (requestedId.HasValue && await UserHasAccessAsync(requestedId.Value, ct))
             return requestedId.Value;
 
+        if (IsSuperAdmin())
+        {
+            return await _db.Workshops
+                .AsNoTracking()
+                .Where(x => x.Activo)
+                .OrderBy(x => x.Id)
+                .Select(x => (int?)x.Id)
+                .FirstOrDefaultAsync(ct);
+        }
+
         return await _db.WorkshopUsers
             .AsNoTracking()
             .Where(x => x.UserId == uid.Value && x.Activo && x.Workshop.Activo)
@@ -46,6 +56,13 @@ public class CurrentWorkshopService : ICurrentWorkshopService
         var uid = _currentUser.UserIdInt;
         if (!uid.HasValue)
             return false;
+
+        if (IsSuperAdmin())
+        {
+            return await _db.Workshops
+                .AsNoTracking()
+                .AnyAsync(x => x.Id == workshopId && x.Activo, ct);
+        }
 
         return await _db.WorkshopUsers
             .AsNoTracking()
@@ -62,5 +79,10 @@ public class CurrentWorkshopService : ICurrentWorkshopService
     {
         var header = _http.HttpContext?.Request.Headers["X-Workshop-Id"].FirstOrDefault();
         return int.TryParse(header, out var id) && id > 0 ? id : null;
+    }
+
+    private bool IsSuperAdmin()
+    {
+        return _http.HttpContext?.User?.IsInRole("superadmin") == true;
     }
 }
