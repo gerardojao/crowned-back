@@ -4,6 +4,7 @@ using FamilyApp.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace FamilyApp.Migrations
 {
     [DbContext(typeof(dbContext))]
-    partial class dbContextModelSnapshot : ModelSnapshot
+    [Migration("20260608150327_IncreaseFichaIngresoDescripcionLength")]
+    partial class IncreaseFichaIngresoDescripcionLength
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -418,11 +421,6 @@ namespace FamilyApp.Migrations
                         .IsUnicode(false)
                         .HasColumnType("varchar(250)");
 
-                    b.Property<string>("Dni")
-                        .HasMaxLength(30)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(30)");
-
                     b.Property<bool>("Eliminado")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bit")
@@ -681,21 +679,11 @@ namespace FamilyApp.Migrations
                         .HasColumnType("bit")
                         .HasDefaultValue(true);
 
-                    b.Property<decimal>("Cantidad")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("decimal(18, 2)")
-                        .HasDefaultValue(1m);
-
                     b.Property<string>("Cliente")
                         .IsRequired()
                         .HasMaxLength(150)
                         .IsUnicode(false)
                         .HasColumnType("varchar(150)");
-
-                    b.Property<string>("Dni")
-                        .HasMaxLength(30)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(30)");
 
                     b.Property<bool>("Eliminado")
                         .ValueGeneratedOnAdd()
@@ -721,9 +709,6 @@ namespace FamilyApp.Migrations
 
                     b.Property<DateTime>("FechaModificacion")
                         .HasColumnType("datetime2");
-
-                    b.Property<string>("ItemsJson")
-                        .HasColumnType("nvarchar(max)");
 
                     b.Property<int?>("Kilometraje")
                         .HasColumnType("int");
@@ -804,11 +789,6 @@ namespace FamilyApp.Migrations
                         .HasColumnType("bit")
                         .HasDefaultValue(true);
 
-                    b.Property<decimal>("Cantidad")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("decimal(18,2)")
-                        .HasDefaultValue(1m);
-
                     b.Property<string>("Cliente")
                         .IsRequired()
                         .HasMaxLength(150)
@@ -819,11 +799,6 @@ namespace FamilyApp.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bit")
                         .HasDefaultValue(false);
-
-                    b.Property<string>("Dni")
-                        .HasMaxLength(30)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(30)");
 
                     b.Property<bool>("Eliminado")
                         .ValueGeneratedOnAdd()
@@ -849,9 +824,6 @@ namespace FamilyApp.Migrations
 
                     b.Property<int?>("IdOrdenTrabajo")
                         .HasColumnType("int");
-
-                    b.Property<string>("ItemsJson")
-                        .HasColumnType("nvarchar(max)");
 
                     b.Property<int?>("Kilometraje")
                         .HasColumnType("int");

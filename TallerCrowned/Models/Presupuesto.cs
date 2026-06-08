@@ -7,6 +7,7 @@
         public string? NumeroPresupuesto { get; set; } = null!;
 
         public string Cliente { get; set; } = null!;
+        public string? Dni { get; set; }
         public string? Telefono { get; set; }
 
         public string Matricula { get; set; } = null!;
@@ -18,7 +19,10 @@
 
         public string Trabajo { get; set; } = null!;
         public decimal Repuestos { get; set; }
+        public decimal Cantidad { get; set; } = 1;
         public decimal ManoObra { get; set; }
+        public decimal Estimado => ManoObra + (Repuestos * Cantidad);
+        public string? ItemsJson { get; set; }
 
         public string Estado { get; set; } = "Pendiente";
         // Pendiente, Aprobado, Rechazado, Convertido

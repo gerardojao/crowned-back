@@ -3,6 +3,7 @@
     public class OrdenTrabajoUpdateDto
     {
         public string? Cliente { get; set; }
+        public string? Dni { get; set; }
         public string? Telefono { get; set; }
 
         public string? Matricula { get; set; }
@@ -15,7 +16,9 @@
         public string? Trabajo { get; set; }
 
         public decimal? Repuestos { get; set; }
+        public decimal? Cantidad { get; set; }
         public decimal? ManoObra { get; set; }
+        public string? ItemsJson { get; set; }
 
         public string? Estado { get; set; }
 

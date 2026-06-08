@@ -26,6 +26,11 @@ namespace TallerCrowned.Controllers
             _currentWorkshopService = currentWorkshopService;
         }
 
+        private static decimal NormalizeCantidad(decimal cantidad)
+        {
+            return cantidad <= 0 ? 1 : cantidad;
+        }
+
         [HttpGet]
         public async Task<ActionResult> GetAll(
      [FromQuery] string? matricula,
@@ -249,6 +254,7 @@ namespace TallerCrowned.Controllers
                 {
                     NumeroPresupuesto = numero,
                     Cliente = dto.Cliente.Trim(),
+                    Dni = dto.Dni?.Trim(),
                     Telefono = dto.Telefono?.Trim(),
                     Matricula = dto.Matricula.Trim().ToUpper(),
                     Marca = dto.Marca?.Trim(),
@@ -256,7 +262,9 @@ namespace TallerCrowned.Controllers
                     Kilometraje = dto.Kilometraje,
                     Fecha = dto.Fecha == default ? DateTime.Now : dto.Fecha,
                     Trabajo = dto.Trabajo.Trim(),
+                    ItemsJson = dto.ItemsJson,
                     Repuestos = dto.Repuestos,
+                    Cantidad = NormalizeCantidad(dto.Cantidad),
                     ManoObra = dto.ManoObra,
                     Estado = string.IsNullOrWhiteSpace(dto.Estado) ? "Pendiente" : dto.Estado.Trim(),
                     Observaciones = dto.Observaciones?.Trim(),
@@ -312,6 +320,7 @@ namespace TallerCrowned.Controllers
                 }
 
                 if (!string.IsNullOrWhiteSpace(dto.Cliente)) presupuesto.Cliente = dto.Cliente.Trim();
+                if (dto.Dni != null) presupuesto.Dni = dto.Dni.Trim();
                 if (dto.Telefono != null) presupuesto.Telefono = dto.Telefono.Trim();
 
                 if (!string.IsNullOrWhiteSpace(dto.Matricula)) presupuesto.Matricula = dto.Matricula.Trim().ToUpper();
@@ -322,8 +331,10 @@ namespace TallerCrowned.Controllers
                 if (dto.Fecha != default) presupuesto.Fecha = dto.Fecha;
 
                 if (!string.IsNullOrWhiteSpace(dto.Trabajo)) presupuesto.Trabajo = dto.Trabajo.Trim();
+                presupuesto.ItemsJson = dto.ItemsJson;
 
                 presupuesto.Repuestos = dto.Repuestos;
+                presupuesto.Cantidad = NormalizeCantidad(dto.Cantidad);
                 presupuesto.ManoObra = dto.ManoObra;
 
                 if (!string.IsNullOrWhiteSpace(dto.Estado)) presupuesto.Estado = dto.Estado.Trim();
@@ -429,6 +440,7 @@ namespace TallerCrowned.Controllers
                 var orden = new OrdenTrabajo
                 {
                     Cliente = presupuesto.Cliente,
+                    Dni = presupuesto.Dni,
                     Telefono = presupuesto.Telefono,
                     Matricula = presupuesto.Matricula,
                     Marca = presupuesto.Marca,
@@ -436,7 +448,9 @@ namespace TallerCrowned.Controllers
                     Kilometraje = presupuesto.Kilometraje,
                     Fecha = DateTime.Now,
                     Trabajo = presupuesto.Trabajo,
+                    ItemsJson = presupuesto.ItemsJson,
                     Repuestos = presupuesto.Repuestos,
+                    Cantidad = presupuesto.Cantidad,
                     ManoObra = presupuesto.ManoObra,
                     Estado = "Recibido",
                     Observaciones = presupuesto.Observaciones,

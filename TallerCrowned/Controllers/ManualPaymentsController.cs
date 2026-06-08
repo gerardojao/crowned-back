@@ -33,9 +33,9 @@ public class ManualPaymentsController : ControllerBase
 
         // 1) Aviso interno (ventas)
         await _mailer.SendAsync(
-            "soporte@familyapp.store",//gerardojao
+            "zagaprosystem@gmail.com",
             "Pago manual recibido",
-            EmailTemplates.AdminManualPayment("soporte@familyapp.store", dto.Method, dto.Note)
+            EmailTemplates.AdminManualPayment("soporte@zagapro.store", dto.Method, dto.Note)
         );
 
         // 2) Acuse de recibo al cliente

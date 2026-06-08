@@ -34,4 +34,9 @@
 		<Folder Include="wwwroot\File\" />
 	</ItemGroup>
 
+	<ItemGroup>
+		<Content Update="appsettings.Development.json" CopyToPublishDirectory="Never" />
+		<Content Update="appsettings.Production.json" CopyToPublishDirectory="PreserveNewest" />
+	</ItemGroup>
+
 </Project>

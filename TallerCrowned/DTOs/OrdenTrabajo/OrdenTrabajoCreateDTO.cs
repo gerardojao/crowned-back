@@ -3,6 +3,7 @@
     public class OrdenTrabajoCreateDto
     {
         public string Cliente { get; set; } = null!;
+        public string? Dni { get; set; }
         public string? Telefono { get; set; }
 
         public string Matricula { get; set; } = null!;
@@ -15,7 +16,9 @@
         public string Trabajo { get; set; } = null!;
 
         public decimal Repuestos { get; set; }
+        public decimal Cantidad { get; set; } = 1;
         public decimal ManoObra { get; set; }
+        public string? ItemsJson { get; set; }
 
         public string Estado { get; set; } = "Recibido";
 

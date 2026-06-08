@@ -33,6 +33,11 @@ public class OrdenTrabajoController : Controller
             return normalized is "reparando" or "esperando repuesto" or "listo" or "entregado";
         }
 
+        private static decimal NormalizeCantidad(decimal cantidad)
+        {
+            return cantidad <= 0 ? 1 : cantidad;
+        }
+
         [HttpGet]
         public async Task<ActionResult> GetAll([FromQuery] OrdenTrabajoSearchDto filter)
         {
@@ -95,6 +100,7 @@ public class OrdenTrabajoController : Controller
                     {
                         Id = x.Id,
                         Cliente = x.Cliente,
+                        Dni = x.Dni,
                         Telefono = x.Telefono,
                         Matricula = x.Matricula,
                         Marca = x.Marca,
@@ -102,7 +108,9 @@ public class OrdenTrabajoController : Controller
                         Kilometraje = x.Kilometraje,
                         Fecha = x.Fecha,
                         Trabajo = x.Trabajo,
+                        ItemsJson = x.ItemsJson,
                         Repuestos = x.Repuestos,
+                        Cantidad = x.Cantidad,
                         ManoObra = x.ManoObra,
                         Estado = x.Estado,
                         Observaciones = x.Observaciones,
@@ -156,6 +164,7 @@ public class OrdenTrabajoController : Controller
                     {
                         Id = x.Id,
                         Cliente = x.Cliente,
+                        Dni = x.Dni,
                         Telefono = x.Telefono,
                         Matricula = x.Matricula,
                         Marca = x.Marca,
@@ -163,7 +172,9 @@ public class OrdenTrabajoController : Controller
                         Kilometraje = x.Kilometraje,
                         Fecha = x.Fecha,
                         Trabajo = x.Trabajo,
+                        ItemsJson = x.ItemsJson,
                         Repuestos = x.Repuestos,
+                        Cantidad = x.Cantidad,
                         ManoObra = x.ManoObra,
                         Estado = x.Estado,
                         Observaciones = x.Observaciones,
@@ -206,6 +217,7 @@ public class OrdenTrabajoController : Controller
                     {
                         Id = x.Id,
                         Cliente = x.Cliente,
+                        Dni = x.Dni,
                         Telefono = x.Telefono,
                         Matricula = x.Matricula,
                         Marca = x.Marca,
@@ -213,7 +225,9 @@ public class OrdenTrabajoController : Controller
                         Kilometraje = x.Kilometraje,
                         Fecha = x.Fecha,
                         Trabajo = x.Trabajo,
+                        ItemsJson = x.ItemsJson,
                         Repuestos = x.Repuestos,
+                        Cantidad = x.Cantidad,
                         ManoObra = x.ManoObra,
                         Estado = x.Estado,
                         Observaciones = x.Observaciones
@@ -266,6 +280,7 @@ public class OrdenTrabajoController : Controller
                 var orden = new OrdenTrabajo
                 {
                     Cliente = dto.Cliente.Trim(),
+                    Dni = dto.Dni?.Trim(),
                     Telefono = dto.Telefono?.Trim(),
                     Matricula = dto.Matricula.Trim().ToUpper(),
                     Marca = dto.Marca?.Trim(),
@@ -273,7 +288,9 @@ public class OrdenTrabajoController : Controller
                     Kilometraje = dto.Kilometraje,
                     Fecha = dto.Fecha == default ? DateTime.Now : dto.Fecha,
                     Trabajo = dto.Trabajo.Trim(),
+                    ItemsJson = dto.ItemsJson,
                     Repuestos = dto.Repuestos,
+                    Cantidad = NormalizeCantidad(dto.Cantidad),
                     ManoObra = dto.ManoObra,
                     Estado = string.IsNullOrWhiteSpace(dto.Estado) ? "Recibido" : dto.Estado.Trim(),
                     Observaciones = dto.Observaciones?.Trim(),
@@ -331,6 +348,7 @@ public class OrdenTrabajoController : Controller
                 }
 
                 if (!string.IsNullOrWhiteSpace(dto.Cliente)) orden.Cliente = dto.Cliente.Trim();
+                if (dto.Dni != null) orden.Dni = dto.Dni.Trim();
                 if (dto.Telefono != null) orden.Telefono = dto.Telefono.Trim();
 
                 if (!string.IsNullOrWhiteSpace(dto.Matricula)) orden.Matricula = dto.Matricula.Trim().ToUpper();
@@ -341,8 +359,10 @@ public class OrdenTrabajoController : Controller
                 if (dto.Fecha.HasValue) orden.Fecha = dto.Fecha.Value;
 
                 if (!string.IsNullOrWhiteSpace(dto.Trabajo)) orden.Trabajo = dto.Trabajo.Trim();
+                orden.ItemsJson = dto.ItemsJson;
 
                 if (dto.Repuestos.HasValue) orden.Repuestos = dto.Repuestos.Value;
+                if (dto.Cantidad.HasValue) orden.Cantidad = NormalizeCantidad(dto.Cantidad.Value);
                 if (dto.ManoObra.HasValue) orden.ManoObra = dto.ManoObra.Value;
 
                 if (!string.IsNullOrWhiteSpace(dto.Estado)) orden.Estado = dto.Estado.Trim();

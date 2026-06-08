@@ -303,7 +303,7 @@ public partial class dbContext : DbContext
             b.Property(e => e.Foto).HasMaxLength(255).IsUnicode(false);
             b.Property(e => e.Importe).HasColumnType("decimal(18, 2)");
             b.Property(e => e.Mes).HasMaxLength(10).IsUnicode(false);
-            b.Property(e => e.Descripcion).HasMaxLength(50).IsRequired(false);
+            b.Property(e => e.Descripcion).HasMaxLength(500).IsRequired(false);
             b.Property(e => e.Eliminado).HasDefaultValue(false);
 
             // auditoría (sombra)
@@ -326,6 +326,11 @@ public partial class dbContext : DbContext
                 .HasMaxLength(150)
                 .IsUnicode(false)
                 .IsRequired();
+
+            b.Property(e => e.Dni)
+                .HasMaxLength(30)
+                .IsUnicode(false)
+                .IsRequired(false);
 
             b.Property(e => e.Telefono)
                 .HasMaxLength(30)
@@ -358,8 +363,15 @@ public partial class dbContext : DbContext
                 .IsUnicode(false)
                 .IsRequired();
 
+            b.Property(e => e.ItemsJson)
+                .HasColumnType("nvarchar(max)");
+
             b.Property(e => e.Repuestos)
                 .HasColumnType("decimal(18, 2)");
+
+            b.Property(e => e.Cantidad)
+                .HasColumnType("decimal(18, 2)")
+                .HasDefaultValue(1m);
 
             b.Property(e => e.ManoObra)
                 .HasColumnType("decimal(18, 2)");
@@ -400,6 +412,11 @@ public partial class dbContext : DbContext
                 .HasMaxLength(150)
                 .IsUnicode(false)
                 .IsRequired();
+
+            b.Property(e => e.Dni)
+                .HasMaxLength(30)
+                .IsUnicode(false)
+                .IsRequired(false);
 
             b.Property(e => e.Telefono)
                 .HasMaxLength(30)
@@ -712,6 +729,10 @@ public partial class dbContext : DbContext
                 .IsUnicode(false)
                 .IsRequired();
 
+            b.Property(x => x.Dni)
+                .HasMaxLength(30)
+                .IsUnicode(false);
+
             b.Property(x => x.Telefono)
                 .HasMaxLength(30)
                 .IsUnicode(false);
@@ -735,8 +756,15 @@ public partial class dbContext : DbContext
                 .IsUnicode(false)
                 .IsRequired();
 
+            b.Property(x => x.ItemsJson)
+                .HasColumnType("nvarchar(max)");
+
             b.Property(x => x.Repuestos)
                 .HasColumnType("decimal(18,2)");
+
+            b.Property(x => x.Cantidad)
+                .HasColumnType("decimal(18,2)")
+                .HasDefaultValue(1m);
 
             b.Property(x => x.ManoObra)
                 .HasColumnType("decimal(18,2)");

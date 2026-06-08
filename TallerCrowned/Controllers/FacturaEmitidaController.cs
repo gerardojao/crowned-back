@@ -111,12 +111,12 @@ namespace TallerCrowned.Controllers
 
                 var ivaPct = dto.IvaPct <= 0 ? 21 : dto.IvaPct;
                 var otros = Round2(dto.Otros);
-                var totalConIva = Round2(items.Sum(x => x.Cantidad * x.Importe));
-                var total = Round2(Math.Max(0, totalConIva - otros));
-                var subtotal = ivaPct > 0
-                    ? Round2(total / (1 + (ivaPct / 100m)))
-                    : total;
-                var iva = Round2(total - subtotal);
+                var baseAntesOtros = Round2(items.Sum(x => x.Cantidad * x.Importe));
+                var subtotal = Round2(Math.Max(0, baseAntesOtros - otros));
+                var iva = ivaPct > 0
+                    ? Round2(subtotal * (ivaPct / 100m))
+                    : 0m;
+                var total = Round2(subtotal + iva);
                 var itemsJson = JsonSerializer.Serialize(
                     items,
                     new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }
@@ -557,7 +557,7 @@ namespace TallerCrowned.Controllers
             foreach (var item in items)
             {
                 var totalLinea = Round2(item.Cantidad * item.Importe);
-                lines.Add($"{item.Descripcion} | Cant.: {item.Cantidad:0.##} | Importe IVA incl.: {totalLinea:0.00} EUR");
+                lines.Add($"{item.Descripcion} | Cant.: {item.Cantidad:0.##} | Precio unitario: {item.Importe:0.00} EUR | Importe: {totalLinea:0.00} EUR");
             }
 
             lines.Add("");

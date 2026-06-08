@@ -15,6 +15,9 @@ using Microsoft.AspNetCore.Http;
 [Route("api/[controller]")]
 public class AuthController : ControllerBase
 {
+    private const string AuthCookieName = ".zagapro.auth";
+    private static readonly string[] LegacyAuthCookieNames = [".tallercrowned.auth", ".familyapp.auth"];
+
     private readonly dbContext _db;
     private readonly IPasswordService _pwd;
     private readonly ITokenService _tokens;
@@ -123,8 +126,6 @@ public class AuthController : ControllerBase
             Secure = true,
             SameSite = SameSiteMode.None,
             Expires = expiresAt
-            // Domain sólo en prod (multi-subdominio):
-            // Domain = isProd ? ".familyapp.store" : null
         };
         if (_env.IsDevelopment())
         {
@@ -135,12 +136,10 @@ public class AuthController : ControllerBase
         {
             cookieOptions.SameSite = SameSiteMode.None;
             cookieOptions.Secure = true;
-            cookieOptions.Domain = ".tallercrowned.store";
+            cookieOptions.Domain = GetAuthCookieDomain();
         }
 
-        //if (isProd) cookieOptions.Domain = ".familyapp.store";
-
-        Response.Cookies.Append(".tallercrowned.auth", token, cookieOptions);
+        Response.Cookies.Append(AuthCookieName, token, cookieOptions);
 
         return Ok(new { token, expiresAt, user = new { user.Id, user.Email, user.Role } });
     }
@@ -174,11 +173,22 @@ public class AuthController : ControllerBase
             Secure = true,
             SameSite = SameSiteMode.None
         };
-        if (isProd) cookieOptions.Domain = ".tallercrowned.store";
+        if (isProd) cookieOptions.Domain = GetAuthCookieDomain();
 
-        Response.Cookies.Delete(".tallercrowned.auth", cookieOptions);
-        Response.Cookies.Delete(".familyapp.auth", cookieOptions);
+        Response.Cookies.Delete(AuthCookieName, cookieOptions);
+        foreach (var legacyCookieName in LegacyAuthCookieNames)
+        {
+            Response.Cookies.Delete(legacyCookieName, cookieOptions);
+        }
         return Ok(new { message = "Sesión cerrada." });
+    }
+
+    private string? GetAuthCookieDomain()
+    {
+        var host = Request.Host.Host;
+        return host.EndsWith("zagapro.store", StringComparison.OrdinalIgnoreCase)
+            ? ".zagapro.store"
+            : null;
     }
 
 
@@ -242,7 +252,7 @@ public class AuthController : ControllerBase
 
         try
         {
-            await _mailer.SendAsync(user.Email, "Restablecer contraseña - TallerCrowned", html);
+            await _mailer.SendAsync(user.Email, "Restablecer contraseña - ZagaPro", html);
         }
         catch (Exception ex)
         {

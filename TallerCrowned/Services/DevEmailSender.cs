@@ -29,8 +29,8 @@ namespace FamilyApp.Services
             var port = int.TryParse(_cfg["Smtp:Port"], out var p) ? p : 587;
             var user = _cfg["Smtp:User"] ?? "resend";
             var pass = _cfg["Smtp:Pass"];
-            var from = _cfg["Smtp:From"] ?? _cfg["Email:From"] ?? "no-reply@tallercrowned.store";
-            var display = string.IsNullOrWhiteSpace(fromName) ? "TallerCrowned" : fromName;
+            var from = _cfg["Smtp:From"] ?? _cfg["Email:From"] ?? "no-reply@zagapro.store";
+            var display = string.IsNullOrWhiteSpace(fromName) ? "ZagaPro" : fromName;
 
             using var client = new SmtpClient(host, port)
             {

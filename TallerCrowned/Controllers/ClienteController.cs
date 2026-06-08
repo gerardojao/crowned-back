@@ -84,6 +84,7 @@ namespace TallerCrowned.Controllers
                     {
                         Id = x.Id,
                         Nombre = x.Nombre,
+                        Dni = x.Dni,
                         Telefono = x.Telefono,
                         Email = x.Email,
                         Direccion = x.Direccion,
@@ -137,6 +138,7 @@ namespace TallerCrowned.Controllers
                     {
                         Id = x.Id,
                         Nombre = x.Nombre,
+                        Dni = x.Dni,
                         Telefono = x.Telefono,
                         Email = x.Email,
                         Direccion = x.Direccion,
@@ -206,6 +208,7 @@ namespace TallerCrowned.Controllers
                 var cliente = new Cliente
                 {
                     Nombre = dto.Nombre.Trim(),
+                    Dni = dto.Dni?.Trim(),
                     Telefono = dto.Telefono.Trim(),
                     Email = dto.Email?.Trim(),
                     Direccion = dto.Direccion?.Trim(),
@@ -261,6 +264,7 @@ namespace TallerCrowned.Controllers
                 }
 
                 if (!string.IsNullOrWhiteSpace(dto.Nombre)) cliente.Nombre = dto.Nombre.Trim();
+                if (dto.Dni != null) cliente.Dni = dto.Dni.Trim();
                 if (!string.IsNullOrWhiteSpace(dto.Telefono)) cliente.Telefono = dto.Telefono.Trim();
 
                 if (dto.Email != null) cliente.Email = dto.Email.Trim();

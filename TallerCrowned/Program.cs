@@ -12,6 +12,12 @@ var builder = WebApplication.CreateBuilder(args);
 
 // ========= 1) SERVICES (ANTES del Build) =========
 var env = builder.Environment; // <- úsalo en AddJwtBearer
+var defaultConnection = builder.Configuration.GetConnectionString("DefaultConnection");
+if (string.IsNullOrWhiteSpace(defaultConnection))
+{
+    throw new InvalidOperationException("Missing required configuration value: ConnectionStrings:DefaultConnection. Set it with the ConnectionStrings__DefaultConnection environment variable in production.");
+}
+
 var jwtKey = builder.Configuration["Jwt:Key"];
 if (string.IsNullOrWhiteSpace(jwtKey))
 {
@@ -23,7 +29,7 @@ builder.Services.AddControllers();
 // DB
 builder.Services.AddDbContext<dbContext>(options =>
 {
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"));
+    options.UseSqlServer(defaultConnection);
 });
 
 // Servicios propios
@@ -48,14 +54,9 @@ builder.Services.AddCors(options =>
         ? configuredProdOrigins
         : new[]
         {
-            "https://invoice.familyapp.store",
-            "https://familyapp.store",
-            "https://www.familyapp.store",
-            "https://www.invoice.familyapp.store",
-            "https://invoice.tallercrowned.store",
-            "https://tallercrowned.store",
-            "https://www.tallercrowned.store",
-            "https://www.invoice.tallercrowned.store"
+            "https://zagapro.store",
+            "https://www.zagapro.store",
+            "https://demo.zagapro.store"
         };
 
     options.AddPolicy("ProdCors", p => p
@@ -104,13 +105,15 @@ builder.Services
             RoleClaimType = ClaimTypes.Role
         };
 
-        options.Events = new JwtBearerEvents
+        options.Events = new JwtBearerEvents//ojo
         {
             OnMessageReceived = ctx =>
             {
                 if (string.IsNullOrEmpty(ctx.Token))
                 {
-                    var cookieToken = ctx.HttpContext.Request.Cookies[".tallercrowned.auth"];
+                    var cookieToken = ctx.HttpContext.Request.Cookies[".zagapro.auth"];
+                    if (string.IsNullOrEmpty(cookieToken))
+                        cookieToken = ctx.HttpContext.Request.Cookies[".tallercrowned.auth"];
                     if (string.IsNullOrEmpty(cookieToken))
                         cookieToken = ctx.HttpContext.Request.Cookies[".familyapp.auth"];
                     if (!string.IsNullOrEmpty(cookieToken)) ctx.Token = cookieToken;
