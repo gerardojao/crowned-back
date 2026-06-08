@@ -29,7 +29,13 @@ namespace TallerCrowned.Controllers
         }
 
         [HttpGet]
-        public async Task<ActionResult> GetAll([FromQuery] string? search, [FromQuery] int page = 1, [FromQuery] int pageSize = 10)
+        public async Task<ActionResult> GetAll(
+            [FromQuery] string? search,
+            [FromQuery] bool? esFacturado = false,
+            [FromQuery] DateTime? fechaInicio = null,
+            [FromQuery] DateTime? fechaFin = null,
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 10)
         {
             var respuesta = new Respuesta<object>();
 
@@ -55,8 +61,27 @@ namespace TallerCrowned.Controllers
                         (x.CodigoReferencia != null && x.CodigoReferencia.ToLower().Contains(s)) ||
                         (x.Marca != null && x.Marca.ToLower().Contains(s)) ||
                         (x.Categoria != null && x.Categoria.ToLower().Contains(s)) ||
-                        (x.Proveedor.Nombre != null && x.Proveedor.Nombre.ToLower().Contains(s))
+                        (x.NumeroFactura != null && x.NumeroFactura.ToLower().Contains(s)) ||
+                        (x.Cliente != null && x.Cliente.ToLower().Contains(s)) ||
+                        (x.Matricula != null && x.Matricula.ToLower().Contains(s)) ||
+                        (x.NombreProveedorSnapshot != null && x.NombreProveedorSnapshot.ToLower().Contains(s)) ||
+                        (x.Proveedor != null && x.Proveedor.Nombre != null && x.Proveedor.Nombre.ToLower().Contains(s))
                     );
+                }
+
+                if (esFacturado.HasValue)
+                    query = query.Where(x => x.EsFacturado == esFacturado.Value);
+
+                if (fechaInicio.HasValue)
+                {
+                    var desde = fechaInicio.Value.Date;
+                    query = query.Where(x => x.FechaFactura >= desde);
+                }
+
+                if (fechaFin.HasValue)
+                {
+                    var hastaExcl = fechaFin.Value.Date.AddDays(1);
+                    query = query.Where(x => x.FechaFactura < hastaExcl);
                 }
 
                 if (page <= 0) page = 1;
@@ -66,7 +91,8 @@ namespace TallerCrowned.Controllers
                 var total = await query.CountAsync();
 
                 var data = await query
-                    .OrderBy(x => x.Cantidad <= x.StockMinimo ? 0 : 1)
+                    .OrderByDescending(x => x.FechaFactura)
+                    .ThenByDescending(x => x.Id)
                     .ThenBy(x => x.Nombre)
                     .Skip((page - 1) * pageSize)
                     .Take(pageSize)
@@ -84,13 +110,19 @@ namespace TallerCrowned.Controllers
                         Ubicacion = x.Ubicacion,
                         Observaciones = x.Observaciones,
                         IdProveedor = x.IdProveedor,
-                        NombreProveedor = x.Proveedor.Nombre,
-                        StockBajo = x.Cantidad <= x.StockMinimo
+                        NombreProveedor = x.NombreProveedorSnapshot ?? (x.Proveedor != null ? x.Proveedor.Nombre : null),
+                        StockBajo = !x.EsFacturado && x.Cantidad <= x.StockMinimo,
+                        EsFacturado = x.EsFacturado,
+                        IdFacturaEmitida = x.IdFacturaEmitida,
+                        NumeroFactura = x.NumeroFactura,
+                        FechaFactura = x.FechaFactura,
+                        Cliente = x.Cliente,
+                        Matricula = x.Matricula
                     })
                     .ToListAsync();
 
                 respuesta.Ok = 1;
-                respuesta.Message = "Stock de repuestos";
+                respuesta.Message = esFacturado == true ? "Rentabilidad de repuestos facturados" : "Catalogo de repuestos";
                 respuesta.Data.Add(new
                 {
                     items = data,
@@ -124,6 +156,7 @@ namespace TallerCrowned.Controllers
                     .Include(x => x.Proveedor)
                     .Where(x =>
                         !x.Eliminado &&
+                        !x.EsFacturado &&
                         x.Cantidad <= x.StockMinimo &&
                         EF.Property<int>(x, "WorkshopId") == workshopId.Value
                     )
@@ -143,8 +176,14 @@ namespace TallerCrowned.Controllers
                         Ubicacion = x.Ubicacion,
                         Observaciones = x.Observaciones,
                         IdProveedor = x.IdProveedor,
-                        NombreProveedor = x.Proveedor.Nombre,
-                        StockBajo = true
+                        NombreProveedor = x.NombreProveedorSnapshot ?? (x.Proveedor != null ? x.Proveedor.Nombre : null),
+                        StockBajo = true,
+                        EsFacturado = x.EsFacturado,
+                        IdFacturaEmitida = x.IdFacturaEmitida,
+                        NumeroFactura = x.NumeroFactura,
+                        FechaFactura = x.FechaFactura,
+                        Cliente = x.Cliente,
+                        Matricula = x.Matricula
                     })
                     .ToListAsync();
 
@@ -194,8 +233,14 @@ namespace TallerCrowned.Controllers
                         Ubicacion = x.Ubicacion,
                         Observaciones = x.Observaciones,
                         IdProveedor = x.IdProveedor,
-                        NombreProveedor = x.Proveedor.Nombre,
-                        StockBajo = x.Cantidad <= x.StockMinimo
+                        NombreProveedor = x.NombreProveedorSnapshot ?? (x.Proveedor != null ? x.Proveedor.Nombre : null),
+                        StockBajo = !x.EsFacturado && x.Cantidad <= x.StockMinimo,
+                        EsFacturado = x.EsFacturado,
+                        IdFacturaEmitida = x.IdFacturaEmitida,
+                        NumeroFactura = x.NumeroFactura,
+                        FechaFactura = x.FechaFactura,
+                        Cliente = x.Cliente,
+                        Matricula = x.Matricula
                     })
                     .FirstOrDefaultAsync();
 
@@ -230,21 +275,21 @@ namespace TallerCrowned.Controllers
                 if (string.IsNullOrWhiteSpace(dto.Nombre))
                     return BadRequest(new { message = "El nombre del repuesto es requerido." });
 
-                if (dto.IdProveedor <= 0)
-                    return BadRequest(new { message = "El proveedor es requerido." });
-
                 var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
                 if (!workshopId.HasValue) return Forbid();
 
-                var proveedorExiste = await _context.Proveedores
-                    .AnyAsync(x =>
-                        x.Id == dto.IdProveedor &&
-                        !x.Eliminado &&
-                        EF.Property<int>(x, "WorkshopId") == workshopId.Value
-                    );
+                if (dto.IdProveedor.HasValue && dto.IdProveedor.Value > 0)
+                {
+                    var proveedorExiste = await _context.Proveedores
+                        .AnyAsync(x =>
+                            x.Id == dto.IdProveedor.Value &&
+                            !x.Eliminado &&
+                            EF.Property<int>(x, "WorkshopId") == workshopId.Value
+                        );
 
-                if (!proveedorExiste)
-                    return BadRequest(new { message = "El proveedor indicado no existe." });
+                    if (!proveedorExiste)
+                        return BadRequest(new { message = "El proveedor indicado no existe." });
+                }
 
                 var repuesto = new RepuestoStock
                 {
@@ -258,7 +303,8 @@ namespace TallerCrowned.Controllers
                     PrecioVenta = dto.PrecioVenta,
                     Ubicacion = dto.Ubicacion?.Trim(),
                     Observaciones = dto.Observaciones?.Trim(),
-                    IdProveedor = dto.IdProveedor,
+                    IdProveedor = dto.IdProveedor.HasValue && dto.IdProveedor.Value > 0 ? dto.IdProveedor.Value : null,
+                    EsFacturado = false,
                     Eliminado = false
                 };
 
@@ -308,19 +354,29 @@ namespace TallerCrowned.Controllers
                     return NotFound(respuesta);
                 }
 
+                if (repuesto.EsFacturado)
+                    return BadRequest(new { message = "No se puede editar un repuesto ya facturado." });
+
                 if (dto.IdProveedor.HasValue)
                 {
-                    var proveedorExiste = await _context.Proveedores
-                        .AnyAsync(x =>
-                            x.Id == dto.IdProveedor.Value &&
-                            !x.Eliminado &&
-                            EF.Property<int>(x, "WorkshopId") == workshopId.Value
-                        );
+                    if (dto.IdProveedor.Value <= 0)
+                    {
+                        repuesto.IdProveedor = null;
+                    }
+                    else
+                    {
+                        var proveedorExiste = await _context.Proveedores
+                            .AnyAsync(x =>
+                                x.Id == dto.IdProveedor.Value &&
+                                !x.Eliminado &&
+                                EF.Property<int>(x, "WorkshopId") == workshopId.Value
+                            );
 
-                    if (!proveedorExiste)
-                        return BadRequest(new { message = "El proveedor indicado no existe." });
+                        if (!proveedorExiste)
+                            return BadRequest(new { message = "El proveedor indicado no existe." });
 
-                    repuesto.IdProveedor = dto.IdProveedor.Value;
+                        repuesto.IdProveedor = dto.IdProveedor.Value;
+                    }
                 }
 
                 if (!string.IsNullOrWhiteSpace(dto.Nombre)) repuesto.Nombre = dto.Nombre.Trim();
@@ -382,6 +438,9 @@ namespace TallerCrowned.Controllers
                     return NotFound(respuesta);
                 }
 
+                if (repuesto.EsFacturado)
+                    return BadRequest(new { message = "No se puede cambiar la cantidad de un repuesto ya facturado." });
+
                 repuesto.Cantidad = cantidad;
 
                 await _context.SaveChangesAsync();
@@ -428,6 +487,9 @@ namespace TallerCrowned.Controllers
                     respuesta.Message = "No existe el repuesto o ya fue eliminado.";
                     return NotFound(respuesta);
                 }
+
+                if (repuesto.EsFacturado)
+                    return BadRequest(new { message = "No se puede eliminar un repuesto ya facturado." });
 
                 repuesto.Eliminado = true;
                 repuesto.FechaEliminacion = DateTime.UtcNow;

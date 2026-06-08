@@ -7,7 +7,7 @@
         public string? Marca { get; set; }
         public string? Categoria { get; set; }
 
-        public int Cantidad { get; set; }
+        public decimal Cantidad { get; set; }
         public int StockMinimo { get; set; } = 3;
 
         public decimal PrecioCompra { get; set; }
@@ -16,6 +16,6 @@
         public string? Ubicacion { get; set; }
         public string? Observaciones { get; set; }
 
-        public int IdProveedor { get; set; }
+        public int? IdProveedor { get; set; }
     }
 }

@@ -9,7 +9,7 @@
         public string? Marca { get; set; }
         public string? Categoria { get; set; }
 
-        public int Cantidad { get; set; }
+        public decimal Cantidad { get; set; }
         public int StockMinimo { get; set; } = 3;
 
         public decimal PrecioCompra { get; set; }
@@ -18,8 +18,16 @@
         public string? Ubicacion { get; set; }
         public string? Observaciones { get; set; }
 
-        public int IdProveedor { get; set; }
-        public Proveedor Proveedor { get; set; } = null!;
+        public int? IdProveedor { get; set; }
+        public Proveedor? Proveedor { get; set; }
+
+        public bool EsFacturado { get; set; }
+        public int? IdFacturaEmitida { get; set; }
+        public string? NumeroFactura { get; set; }
+        public DateTime? FechaFactura { get; set; }
+        public string? Cliente { get; set; }
+        public string? Matricula { get; set; }
+        public string? NombreProveedorSnapshot { get; set; }
 
         public bool Eliminado { get; set; }
         public DateTime? FechaEliminacion { get; set; }

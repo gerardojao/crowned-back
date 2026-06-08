@@ -558,6 +558,9 @@ public partial class dbContext : DbContext
                 .HasMaxLength(500)
                 .IsUnicode(false);
 
+            b.Property(x => x.Cantidad)
+                .HasColumnType("decimal(18,2)");
+
             b.Property(x => x.PrecioCompra)
                 .HasColumnType("decimal(18,2)");
 
@@ -566,6 +569,28 @@ public partial class dbContext : DbContext
 
             b.Property(x => x.StockMinimo)
                 .HasDefaultValue(3);
+
+            b.Property(x => x.EsFacturado)
+                .HasDefaultValue(false);
+
+            b.Property(x => x.NumeroFactura)
+                .HasMaxLength(30)
+                .IsUnicode(false);
+
+            b.Property(x => x.FechaFactura)
+                .HasColumnType("datetime");
+
+            b.Property(x => x.Cliente)
+                .HasMaxLength(150)
+                .IsUnicode(false);
+
+            b.Property(x => x.Matricula)
+                .HasMaxLength(20)
+                .IsUnicode(false);
+
+            b.Property(x => x.NombreProveedorSnapshot)
+                .HasMaxLength(150)
+                .IsUnicode(false);
 
             b.Property(x => x.Eliminado)
                 .HasDefaultValue(false);
@@ -578,6 +603,9 @@ public partial class dbContext : DbContext
             b.HasIndex(x => x.Nombre);
             b.HasIndex(x => x.Categoria);
             b.HasIndex(x => x.CodigoReferencia);
+            b.HasIndex(x => x.NumeroFactura);
+            b.HasIndex(x => x.FechaFactura);
+            b.HasIndex(x => x.EsFacturado);
             b.Property<bool>("Activo").HasDefaultValue(true);
             b.Property<string>("UsuarioCreacion").HasMaxLength(64);
             b.Property<DateTime>("FechaCreacion");

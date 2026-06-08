@@ -147,6 +147,7 @@ namespace TallerCrowned.Controllers
                 await _context.SaveChangesAsync();
 
                 await CrearIngresoAutomaticoSiAplica(factura, items, workshopId.Value);
+                await CrearRentabilidadRepuestosFacturados(factura, items, workshopId.Value);
 
                 if (factura.IdOrdenTrabajo.HasValue)
                 {
@@ -333,6 +334,92 @@ namespace TallerCrowned.Controllers
             }
         }
 
+        private async Task CrearRentabilidadRepuestosFacturados(FacturaEmitida factura, List<FacturaItemDTO> items, int workshopId)
+        {
+            foreach (var item in items)
+            {
+                RepuestoStock? repuestoBase = null;
+                var repuestoBaseId = item.RepuestoStockId ?? item.IdRepuesto;
+
+                if (repuestoBaseId.HasValue)
+                {
+                    repuestoBase = await _context.RepuestosStock
+                        .Include(x => x.Proveedor)
+                        .FirstOrDefaultAsync(x =>
+                            x.Id == repuestoBaseId.Value &&
+                            !x.Eliminado &&
+                            !x.EsFacturado &&
+                            EF.Property<int>(x, "WorkshopId") == workshopId
+                        );
+                }
+
+                if (repuestoBase == null && !string.IsNullOrWhiteSpace(item.Descripcion))
+                {
+                    var descripcion = item.Descripcion.Trim();
+                    repuestoBase = await _context.RepuestosStock
+                        .Include(x => x.Proveedor)
+                        .FirstOrDefaultAsync(x =>
+                            x.Nombre == descripcion &&
+                            !x.Eliminado &&
+                            !x.EsFacturado &&
+                            EF.Property<int>(x, "WorkshopId") == workshopId
+                        );
+                }
+
+                var proveedorId = item.IdProveedor ?? repuestoBase?.IdProveedor;
+                string? nombreProveedor = item.NombreProveedor?.Trim();
+
+                if (string.IsNullOrWhiteSpace(nombreProveedor))
+                    nombreProveedor = repuestoBase?.Proveedor?.Nombre;
+
+                if (string.IsNullOrWhiteSpace(nombreProveedor) && proveedorId.HasValue)
+                {
+                    nombreProveedor = await _context.Proveedores
+                        .Where(x =>
+                            x.Id == proveedorId.Value &&
+                            !x.Eliminado &&
+                            EF.Property<int>(x, "WorkshopId") == workshopId
+                        )
+                        .Select(x => x.Nombre)
+                        .FirstOrDefaultAsync();
+                }
+
+                var precioCompra = Round2(item.PrecioCompra ?? repuestoBase?.PrecioCompra ?? 0m);
+                var precioVenta = Round2(item.Importe);
+                var categoria = EsLineaRepuesto(item) || repuestoBase != null
+                    ? "Repuesto facturado"
+                    : NormalizarTexto(item.Kind ?? item.Tipo ?? "") == "labor"
+                        ? "Mano de obra facturada"
+                        : "Concepto facturado";
+
+                var repuestoFacturado = new RepuestoStock
+                {
+                    Nombre = (item.Descripcion ?? repuestoBase?.Nombre ?? "Concepto facturado").Trim(),
+                    CodigoReferencia = repuestoBase?.CodigoReferencia,
+                    Marca = repuestoBase?.Marca,
+                    Categoria = categoria,
+                    Cantidad = item.Cantidad,
+                    StockMinimo = 0,
+                    PrecioCompra = precioCompra,
+                    PrecioVenta = precioVenta,
+                    Ubicacion = null,
+                    Observaciones = $"Factura {factura.NumeroFactura}",
+                    IdProveedor = proveedorId,
+                    NombreProveedorSnapshot = nombreProveedor,
+                    EsFacturado = true,
+                    IdFacturaEmitida = factura.Id,
+                    NumeroFactura = factura.NumeroFactura,
+                    FechaFactura = factura.Fecha,
+                    Cliente = factura.Cliente,
+                    Matricula = factura.Matricula,
+                    Eliminado = false
+                };
+
+                _context.RepuestosStock.Add(repuestoFacturado);
+                _context.Entry(repuestoFacturado).Property("WorkshopId").CurrentValue = workshopId;
+            }
+        }
+
         private static List<FacturaItemDTO> NormalizeItems(List<FacturaItemDTO>? items, string? itemsJson)
         {
             var source = items is { Count: > 0 } ? items : DeserializeItems(itemsJson);
@@ -343,10 +430,30 @@ namespace TallerCrowned.Controllers
                 {
                     Descripcion = x.Descripcion?.Trim(),
                     Cantidad = x.Cantidad <= 0 ? 1 : Round2(x.Cantidad),
-                    Importe = Round2(x.Importe)
+                    Importe = Round2(x.Importe),
+                    Tipo = x.Tipo?.Trim(),
+                    Kind = x.Kind?.Trim(),
+                    RepuestoStockId = x.RepuestoStockId,
+                    IdRepuesto = x.IdRepuesto,
+                    IdProveedor = x.IdProveedor,
+                    NombreProveedor = x.NombreProveedor?.Trim(),
+                    PrecioCompra = x.PrecioCompra.HasValue ? Round2(x.PrecioCompra.Value) : null
                 })
                 .Where(x => Round2(x.Cantidad * x.Importe) > 0)
                 .ToList();
+        }
+
+        private static bool EsLineaRepuesto(FacturaItemDTO item)
+        {
+            var tipo = NormalizarTexto(item.Tipo ?? item.Kind ?? "");
+            if (tipo is "repuesto" or "repuestos" or "part" or "parts")
+                return true;
+
+            if (item.RepuestoStockId.HasValue || item.IdRepuesto.HasValue || item.PrecioCompra.HasValue || item.IdProveedor.HasValue)
+                return true;
+
+            var desc = NormalizarTexto(item.Descripcion ?? "");
+            return desc.Contains("repuesto");
         }
 
         private static List<FacturaItemDTO> DeserializeItems(string? itemsJson)
@@ -696,5 +803,12 @@ namespace TallerCrowned.Controllers
         public string? Descripcion { get; set; }
         public decimal Cantidad { get; set; }
         public decimal Importe { get; set; }
+        public string? Tipo { get; set; }
+        public string? Kind { get; set; }
+        public int? RepuestoStockId { get; set; }
+        public int? IdRepuesto { get; set; }
+        public int? IdProveedor { get; set; }
+        public string? NombreProveedor { get; set; }
+        public decimal? PrecioCompra { get; set; }
     }
 }
