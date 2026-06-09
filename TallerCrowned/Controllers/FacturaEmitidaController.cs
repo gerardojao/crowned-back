@@ -322,7 +322,7 @@ namespace TallerCrowned.Controllers
                         Cliente = factura.Cliente,
                         Telefono = factura.TelefonoCliente,
                         Mensaje = $"Llamar al cliente {factura.Cliente} al movil {factura.TelefonoCliente} para indicarle que le toca Servicio de cambio de aceite y filtro.",
-                        FechaAviso = DateTime.UtcNow.AddMonths(1),
+                        FechaAviso = DateTime.UtcNow.AddMonths(8),
                         Atendida = false,
                         IdFacturaEmitida = factura.Id,
                         Eliminado = false

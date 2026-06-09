@@ -51,7 +51,13 @@ namespace TallerCrowned.Controllers
                     x.EnableWhatsappAlerts,
                     x.EnableInvoiceExport,
                     x.EnableProfitAndLoss,
-                    ActiveUsers = _context.WorkshopUsers.Count(wu => wu.WorkshopId == x.Id && wu.Activo),
+                    ActiveUsers = _context.WorkshopUsers.Count(wu =>
+                        wu.WorkshopId == x.Id &&
+                        wu.Activo &&
+                        _context.Users.Any(u =>
+                            u.Id == wu.UserId &&
+                            u.IsActive &&
+                            u.Role != "superadmin")),
                     x.Activo
                 })
                 .ToListAsync();
@@ -139,12 +145,17 @@ namespace TallerCrowned.Controllers
             var workshop = await _context.Workshops.FirstOrDefaultAsync(x => x.Id == workshopId && x.Activo);
             if (workshop == null) return NotFound(new { message = "No existe el negocio." });
 
-            var activeUsers = await _context.WorkshopUsers.CountAsync(x => x.WorkshopId == workshopId && x.Activo);
-            var maxUsers = workshop.MaxUsers <= 0 ? DefaultMaxUsers : workshop.MaxUsers;
-            if (activeUsers >= maxUsers)
-                return BadRequest(new { message = $"Este negocio ya tiene el maximo permitido de {maxUsers} usuarios activos." });
+            var email = dto.Email.Trim().ToLowerInvariant();
+            var user = await _context.Users.FirstOrDefaultAsync(x => x.Email == email);
+            if (user == null)
+            {
+                var activeUsers = await CountBillableActiveUsers(workshopId);
+                var maxUsers = workshop.MaxUsers <= 0 ? DefaultMaxUsers : workshop.MaxUsers;
+                if (activeUsers >= maxUsers)
+                    return BadRequest(new { message = $"Este negocio ya tiene el maximo permitido de {maxUsers} usuarios activos." });
+            }
 
-            var user = await GetOrCreateUser(dto.Email, dto.Password, dto.FullName);
+            user = await GetOrCreateUser(dto.Email, dto.Password, dto.FullName);
             if (user == null)
                 return BadRequest(new { message = "La contraseña es requerida para crear un usuario nuevo." });
 
@@ -153,11 +164,27 @@ namespace TallerCrowned.Controllers
             {
                 if (relation.Activo) return Conflict(new { message = "El usuario ya pertenece a este negocio." });
 
+                if (IsBillableUser(user))
+                {
+                    var activeUsers = await CountBillableActiveUsers(workshopId);
+                    var maxUsers = workshop.MaxUsers <= 0 ? DefaultMaxUsers : workshop.MaxUsers;
+                    if (activeUsers >= maxUsers)
+                        return BadRequest(new { message = $"Este negocio ya tiene el maximo permitido de {maxUsers} usuarios activos." });
+                }
+
                 relation.Activo = true;
                 relation.Role = NormalizeWorkshopRole(dto.Role);
             }
             else
             {
+                if (IsBillableUser(user))
+                {
+                    var activeUsers = await CountBillableActiveUsers(workshopId);
+                    var maxUsers = workshop.MaxUsers <= 0 ? DefaultMaxUsers : workshop.MaxUsers;
+                    if (activeUsers >= maxUsers)
+                        return BadRequest(new { message = $"Este negocio ya tiene el maximo permitido de {maxUsers} usuarios activos." });
+                }
+
                 _context.WorkshopUsers.Add(new WorkshopUser
                 {
                     WorkshopId = workshopId,
@@ -234,10 +261,13 @@ namespace TallerCrowned.Controllers
                     var workshop = await _context.Workshops.AsNoTracking().FirstOrDefaultAsync(x => x.Id == workshopId);
                     if (workshop == null) return NotFound(new { message = "No existe el negocio." });
 
-                    var activeUsers = await _context.WorkshopUsers.CountAsync(x => x.WorkshopId == workshopId && x.Activo);
-                    var maxUsers = workshop.MaxUsers <= 0 ? DefaultMaxUsers : workshop.MaxUsers;
-                    if (activeUsers >= maxUsers)
-                        return BadRequest(new { message = $"Este negocio ya tiene el maximo permitido de {maxUsers} usuarios activos." });
+                    if (IsBillableUser(user))
+                    {
+                        var activeUsers = await CountBillableActiveUsers(workshopId);
+                        var maxUsers = workshop.MaxUsers <= 0 ? DefaultMaxUsers : workshop.MaxUsers;
+                        if (activeUsers >= maxUsers)
+                            return BadRequest(new { message = $"Este negocio ya tiene el maximo permitido de {maxUsers} usuarios activos." });
+                    }
                 }
 
                 relation.Activo = dto.WorkshopUserActive.Value;
@@ -290,7 +320,7 @@ namespace TallerCrowned.Controllers
                 if (dto.MaxUsers.Value < 1 || dto.MaxUsers.Value > DefaultMaxUsers)
                     return BadRequest(new { message = $"El maximo de usuarios por negocio no puede superar {DefaultMaxUsers}." });
 
-                var activeUsers = await _context.WorkshopUsers.CountAsync(x => x.WorkshopId == workshopId && x.Activo);
+                var activeUsers = await CountBillableActiveUsers(workshopId);
                 if (activeUsers > dto.MaxUsers.Value)
                     return BadRequest(new { message = "No puedes bajar el limite por debajo de los usuarios activos actuales." });
 
@@ -362,6 +392,23 @@ namespace TallerCrowned.Controllers
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
             return user;
+        }
+
+        private Task<int> CountBillableActiveUsers(int workshopId)
+        {
+            return _context.WorkshopUsers
+                .Where(wu => wu.WorkshopId == workshopId && wu.Activo)
+                .Join(
+                    _context.Users,
+                    wu => wu.UserId,
+                    u => u.Id,
+                    (wu, u) => u)
+                .CountAsync(u => u.IsActive && u.Role != "superadmin");
+        }
+
+        private static bool IsBillableUser(AppUser user)
+        {
+            return user.IsActive && user.Role != "superadmin";
         }
 
         private static string NormalizeWorkshopRole(string? role)

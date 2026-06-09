@@ -464,6 +464,116 @@ namespace TallerCrowned.Controllers
             }
         }
 
+        [HttpPatch("{id:int}/rentabilidad")]
+        public async Task<ActionResult> UpdateRentabilidad(int id, [FromBody] RepuestoStockRentabilidadUpdateDTO dto)
+        {
+            var respuesta = new Respuesta<object>();
+
+            try
+            {
+                if (dto == null)
+                    return BadRequest(new { message = "Body vacio." });
+
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
+
+                var repuesto = await _context.RepuestosStock
+                    .FirstOrDefaultAsync(x =>
+                        x.Id == id &&
+                        !x.Eliminado &&
+                        x.EsFacturado &&
+                        EF.Property<int>(x, "WorkshopId") == workshopId.Value
+                    );
+
+                if (repuesto == null)
+                {
+                    respuesta.Ok = 0;
+                    respuesta.Message = "No existe la linea facturada o fue eliminada.";
+                    return NotFound(respuesta);
+                }
+
+                if (!string.IsNullOrWhiteSpace(dto.Nombre))
+                    repuesto.Nombre = dto.Nombre.Trim();
+
+                if (dto.Cantidad.HasValue)
+                {
+                    if (dto.Cantidad.Value <= 0)
+                        return BadRequest(new { message = "La cantidad debe ser mayor que cero." });
+
+                    repuesto.Cantidad = dto.Cantidad.Value;
+                }
+
+                if (dto.PrecioCompra.HasValue)
+                {
+                    if (dto.PrecioCompra.Value < 0)
+                        return BadRequest(new { message = "El precio de compra no puede ser negativo." });
+
+                    repuesto.PrecioCompra = dto.PrecioCompra.Value;
+                }
+
+                if (dto.IdProveedor.HasValue)
+                {
+                    if (dto.IdProveedor.Value <= 0)
+                    {
+                        repuesto.IdProveedor = null;
+                        repuesto.NombreProveedorSnapshot = null;
+                    }
+                    else
+                    {
+                        var proveedor = await _context.Proveedores
+                            .AsNoTracking()
+                            .FirstOrDefaultAsync(x =>
+                                x.Id == dto.IdProveedor.Value &&
+                                !x.Eliminado &&
+                                EF.Property<int>(x, "WorkshopId") == workshopId.Value
+                            );
+
+                        if (proveedor == null)
+                            return BadRequest(new { message = "El proveedor indicado no existe." });
+
+                        repuesto.IdProveedor = proveedor.Id;
+                        repuesto.NombreProveedorSnapshot = proveedor.Nombre;
+                    }
+                }
+
+                await _context.SaveChangesAsync();
+
+                respuesta.Ok = 1;
+                respuesta.Message = "Linea de rentabilidad actualizada correctamente.";
+                respuesta.Data.Add(new RepuestoStockReadDTO
+                {
+                    Id = repuesto.Id,
+                    Nombre = repuesto.Nombre,
+                    CodigoReferencia = repuesto.CodigoReferencia,
+                    Marca = repuesto.Marca,
+                    Categoria = repuesto.Categoria,
+                    Cantidad = repuesto.Cantidad,
+                    StockMinimo = repuesto.StockMinimo,
+                    PrecioCompra = repuesto.PrecioCompra,
+                    PrecioVenta = repuesto.PrecioVenta,
+                    Ubicacion = repuesto.Ubicacion,
+                    Observaciones = repuesto.Observaciones,
+                    IdProveedor = repuesto.IdProveedor,
+                    NombreProveedor = repuesto.NombreProveedorSnapshot,
+                    StockBajo = false,
+                    EsFacturado = repuesto.EsFacturado,
+                    IdFacturaEmitida = repuesto.IdFacturaEmitida,
+                    NumeroFactura = repuesto.NumeroFactura,
+                    FechaFactura = repuesto.FechaFactura,
+                    Cliente = repuesto.Cliente,
+                    Matricula = repuesto.Matricula
+                });
+
+                return Ok(respuesta);
+            }
+            catch (Exception e)
+            {
+                respuesta.Ok = 0;
+                respuesta.Message = e.Message + (e.InnerException != null ? " " + e.InnerException.Message : "");
+                return Ok(respuesta);
+            }
+        }
+
         [HttpDelete("{id:int}")]
         public async Task<ActionResult> DeleteSoft(int id)
         {
