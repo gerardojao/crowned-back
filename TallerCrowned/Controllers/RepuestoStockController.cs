@@ -492,17 +492,6 @@ namespace TallerCrowned.Controllers
                     return NotFound(respuesta);
                 }
 
-                if (!string.IsNullOrWhiteSpace(dto.Nombre))
-                    repuesto.Nombre = dto.Nombre.Trim();
-
-                if (dto.Cantidad.HasValue)
-                {
-                    if (dto.Cantidad.Value <= 0)
-                        return BadRequest(new { message = "La cantidad debe ser mayor que cero." });
-
-                    repuesto.Cantidad = dto.Cantidad.Value;
-                }
-
                 if (dto.PrecioCompra.HasValue)
                 {
                     if (dto.PrecioCompra.Value < 0)

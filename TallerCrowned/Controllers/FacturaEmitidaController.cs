@@ -242,6 +242,18 @@ namespace TallerCrowned.Controllers
             };
 
             var debeCrearAlertaAceite = false;
+            var serviciosFrecuentes = await _context.ServiciosFrecuentes
+                .AsNoTracking()
+                .Where(x =>
+                    !x.Eliminado &&
+                    EF.Property<int>(x, "WorkshopId") == workshopId
+                )
+                .Select(x => x.Nombre)
+                .ToListAsync();
+            var serviciosFrecuentesNormalizados = serviciosFrecuentes
+                .Select(NormalizarTexto)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .ToHashSet();
 
             foreach (var item in items)
             {
@@ -257,7 +269,11 @@ namespace TallerCrowned.Controllers
                     .Key;
 
                 if (string.IsNullOrWhiteSpace(nombreCuenta))
-                    nombreCuenta = "Ventas";
+                {
+                    nombreCuenta = serviciosFrecuentesNormalizados.Contains(descLower)
+                        ? "Servicio"
+                        : "Ventas";
+                }
 
                 if (nombreCuenta == "Servicio cambio de aceite y filtro")
                     debeCrearAlertaAceite = true;
