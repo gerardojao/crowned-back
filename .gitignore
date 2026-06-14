@@ -15,11 +15,20 @@ publish/
 dist/
 logs/
 *.log
+.codex-tmp/
+.codex-logs/
 
 # --- Sistema ---
 Thumbs.db
 desktop.ini
 
 # --- Secretos / configuración sensible ---
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.local
 appsettings.Production.json
+appsettings.Local.json
 appsettings.*.local.json
+Properties/PublishProfiles/*.pubxml
