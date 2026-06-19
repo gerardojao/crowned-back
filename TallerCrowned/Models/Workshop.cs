@@ -21,6 +21,8 @@ namespace TallerCrowned.Models
         public bool EnableWhatsappAlerts { get; set; } = true;
         public bool EnableInvoiceExport { get; set; } = true;
         public bool EnableProfitAndLoss { get; set; } = true;
+        public bool EnableDashboardRepairVehicles { get; set; } = true;
+        public bool EnableAccountsReceivable { get; set; } = true;
         public bool Activo { get; set; } = true;
         public DateTime FechaCreacion { get; set; } = DateTime.UtcNow;
     }

@@ -20,6 +20,12 @@
         public decimal Iva { get; set; }
         public decimal Otros { get; set; }
         public decimal Total { get; set; }
+        public decimal TotalFactura { get; set; }
+        public decimal TotalAbonado { get; set; }
+        public decimal SaldoPendiente { get; set; }
+        public DateTime? FechaVencimiento { get; set; }
+        public string TipoPago { get; set; } = "Contado";
+        public string EstadoCxC { get; set; } = "Pagada";
 
         public string? Observaciones { get; set; }
         public string ItemsJson { get; set; } = null!;

@@ -2699,3 +2699,113 @@ GO
 COMMIT;
 GO
 
+BEGIN TRANSACTION;
+GO
+
+IF COL_LENGTH('Workshop', 'EnableAccountsReceivable') IS NULL
+BEGIN
+    ALTER TABLE [Workshop] ADD [EnableAccountsReceivable] bit NOT NULL DEFAULT CAST(1 AS bit);
+END;
+GO
+
+IF COL_LENGTH('Workshop', 'EnableDashboardRepairVehicles') IS NULL
+BEGIN
+    ALTER TABLE [Workshop] ADD [EnableDashboardRepairVehicles] bit NOT NULL DEFAULT CAST(1 AS bit);
+END;
+GO
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260619142953_AddDashboardCommercialModules'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20260619142953_AddDashboardCommercialModules', N'8.0.28');
+END;
+GO
+
+COMMIT;
+GO
+
+BEGIN TRANSACTION;
+GO
+
+IF COL_LENGTH('FacturaEmitida', 'EstadoCxC') IS NULL
+BEGIN
+    ALTER TABLE [FacturaEmitida] ADD [EstadoCxC] varchar(20) NOT NULL DEFAULT 'Pagada';
+END;
+GO
+
+IF COL_LENGTH('FacturaEmitida', 'FechaVencimiento') IS NULL
+BEGIN
+    ALTER TABLE [FacturaEmitida] ADD [FechaVencimiento] datetime NULL;
+END;
+GO
+
+IF COL_LENGTH('FacturaEmitida', 'SaldoPendiente') IS NULL
+BEGIN
+    ALTER TABLE [FacturaEmitida] ADD [SaldoPendiente] decimal(18,2) NOT NULL DEFAULT 0.0;
+END;
+GO
+
+IF COL_LENGTH('FacturaEmitida', 'TipoPago') IS NULL
+BEGIN
+    ALTER TABLE [FacturaEmitida] ADD [TipoPago] varchar(20) NOT NULL DEFAULT 'Contado';
+END;
+GO
+
+IF COL_LENGTH('FacturaEmitida', 'TotalAbonado') IS NULL
+BEGIN
+    ALTER TABLE [FacturaEmitida] ADD [TotalAbonado] decimal(18,2) NOT NULL DEFAULT 0.0;
+END;
+GO
+
+IF COL_LENGTH('FacturaEmitida', 'TotalFactura') IS NULL
+BEGIN
+    ALTER TABLE [FacturaEmitida] ADD [TotalFactura] decimal(18,2) NOT NULL DEFAULT 0.0;
+END;
+GO
+
+UPDATE [FacturaEmitida]
+SET
+    [TotalFactura] = [Total],
+    [TotalAbonado] = [Total],
+    [SaldoPendiente] = 0,
+    [TipoPago] = 'Contado',
+    [EstadoCxC] = 'Pagada'
+WHERE [TotalFactura] = 0 AND [Total] > 0;
+GO
+
+IF NOT EXISTS (
+    SELECT 1 FROM sys.indexes
+    WHERE name = N'IX_FacturaEmitida_EstadoCxC'
+        AND object_id = OBJECT_ID(N'[FacturaEmitida]')
+)
+BEGIN
+    CREATE INDEX [IX_FacturaEmitida_EstadoCxC] ON [FacturaEmitida] ([EstadoCxC]);
+END;
+GO
+
+IF NOT EXISTS (
+    SELECT 1 FROM sys.indexes
+    WHERE name = N'IX_FacturaEmitida_FechaVencimiento'
+        AND object_id = OBJECT_ID(N'[FacturaEmitida]')
+)
+BEGIN
+    CREATE INDEX [IX_FacturaEmitida_FechaVencimiento] ON [FacturaEmitida] ([FechaVencimiento]);
+END;
+GO
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260619154300_AddFacturaCuentasPorCobrar'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20260619154300_AddFacturaCuentasPorCobrar', N'8.0.28');
+END;
+GO
+
+COMMIT;
+GO
+

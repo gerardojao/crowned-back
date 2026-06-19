@@ -74,7 +74,9 @@ namespace TallerCrowned.Controllers
                 TermsText = null,
                 EnableWhatsappAlerts = true,
                 EnableInvoiceExport = true,
-                EnableProfitAndLoss = true
+                EnableProfitAndLoss = true,
+                EnableDashboardRepairVehicles = true,
+                EnableAccountsReceivable = true
             });
         }
 
@@ -130,7 +132,9 @@ namespace TallerCrowned.Controllers
                 TermsText = workshop.TermsText,
                 EnableWhatsappAlerts = workshop.EnableWhatsappAlerts,
                 EnableInvoiceExport = workshop.EnableInvoiceExport,
-                EnableProfitAndLoss = workshop.EnableProfitAndLoss
+                EnableProfitAndLoss = workshop.EnableProfitAndLoss,
+                EnableDashboardRepairVehicles = workshop.EnableDashboardRepairVehicles,
+                EnableAccountsReceivable = workshop.EnableAccountsReceivable
             };
         }
 
@@ -167,5 +171,7 @@ namespace TallerCrowned.Controllers
         public bool EnableWhatsappAlerts { get; set; } = true;
         public bool EnableInvoiceExport { get; set; } = true;
         public bool EnableProfitAndLoss { get; set; } = true;
+        public bool EnableDashboardRepairVehicles { get; set; } = true;
+        public bool EnableAccountsReceivable { get; set; } = true;
     }
 }

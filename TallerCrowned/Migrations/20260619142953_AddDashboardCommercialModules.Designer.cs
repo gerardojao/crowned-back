@@ -4,6 +4,7 @@ using FamilyApp.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace FamilyApp.Migrations
 {
     [DbContext(typeof(dbContext))]
-    partial class dbContextModelSnapshot : ModelSnapshot
+    [Migration("20260619142953_AddDashboardCommercialModules")]
+    partial class AddDashboardCommercialModules
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -539,14 +542,6 @@ namespace FamilyApp.Migrations
                         .HasColumnType("bit")
                         .HasDefaultValue(false);
 
-                    b.Property<string>("EstadoCxC")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(20)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(20)")
-                        .HasDefaultValue("Pagada");
-
                     b.Property<DateTime>("Fecha")
                         .HasColumnType("datetime2");
 
@@ -558,9 +553,6 @@ namespace FamilyApp.Migrations
 
                     b.Property<DateTime>("FechaModificacion")
                         .HasColumnType("datetime2");
-
-                    b.Property<DateTime?>("FechaVencimiento")
-                        .HasColumnType("datetime");
 
                     b.Property<int?>("IdOrdenTrabajo")
                         .HasColumnType("int");
@@ -596,9 +588,6 @@ namespace FamilyApp.Migrations
                     b.Property<decimal>("Otros")
                         .HasColumnType("decimal(18,2)");
 
-                    b.Property<decimal>("SaldoPendiente")
-                        .HasColumnType("decimal(18,2)");
-
                     b.Property<decimal>("Subtotal")
                         .HasColumnType("decimal(18,2)");
 
@@ -607,21 +596,7 @@ namespace FamilyApp.Migrations
                         .IsUnicode(false)
                         .HasColumnType("varchar(30)");
 
-                    b.Property<string>("TipoPago")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(20)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(20)")
-                        .HasDefaultValue("Contado");
-
                     b.Property<decimal>("Total")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal>("TotalAbonado")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal>("TotalFactura")
                         .HasColumnType("decimal(18,2)");
 
                     b.Property<string>("UsuarioCreacion")
@@ -638,10 +613,6 @@ namespace FamilyApp.Migrations
                         .HasDefaultValue(1);
 
                     b.HasKey("Id");
-
-                    b.HasIndex("EstadoCxC");
-
-                    b.HasIndex("FechaVencimiento");
 
                     b.HasIndex("IdOrdenTrabajo");
 

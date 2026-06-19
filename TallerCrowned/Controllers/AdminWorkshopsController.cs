@@ -51,6 +51,8 @@ namespace TallerCrowned.Controllers
                     x.EnableWhatsappAlerts,
                     x.EnableInvoiceExport,
                     x.EnableProfitAndLoss,
+                    x.EnableDashboardRepairVehicles,
+                    x.EnableAccountsReceivable,
                     ActiveUsers = _context.WorkshopUsers.Count(wu =>
                         wu.WorkshopId == x.Id &&
                         wu.Activo &&
@@ -107,6 +109,8 @@ namespace TallerCrowned.Controllers
                 EnableWhatsappAlerts = dto.EnableWhatsappAlerts.GetValueOrDefault(true),
                 EnableInvoiceExport = dto.EnableInvoiceExport.GetValueOrDefault(true),
                 EnableProfitAndLoss = dto.EnableProfitAndLoss.GetValueOrDefault(true),
+                EnableDashboardRepairVehicles = dto.EnableDashboardRepairVehicles.GetValueOrDefault(true),
+                EnableAccountsReceivable = dto.EnableAccountsReceivable.GetValueOrDefault(true),
                 Activo = true,
                 FechaCreacion = DateTime.UtcNow
             };
@@ -361,6 +365,10 @@ namespace TallerCrowned.Controllers
                 workshop.EnableInvoiceExport = dto.EnableInvoiceExport.Value;
             if (dto.EnableProfitAndLoss.HasValue)
                 workshop.EnableProfitAndLoss = dto.EnableProfitAndLoss.Value;
+            if (dto.EnableDashboardRepairVehicles.HasValue)
+                workshop.EnableDashboardRepairVehicles = dto.EnableDashboardRepairVehicles.Value;
+            if (dto.EnableAccountsReceivable.HasValue)
+                workshop.EnableAccountsReceivable = dto.EnableAccountsReceivable.Value;
             if (dto.BusinessType != null)
                 workshop.BusinessType = NormalizeBusinessType(dto.BusinessType);
             if (dto.TerminologyProfile != null)
@@ -464,6 +472,8 @@ namespace TallerCrowned.Controllers
         public bool? EnableWhatsappAlerts { get; set; }
         public bool? EnableInvoiceExport { get; set; }
         public bool? EnableProfitAndLoss { get; set; }
+        public bool? EnableDashboardRepairVehicles { get; set; }
+        public bool? EnableAccountsReceivable { get; set; }
         public string? OwnerEmail { get; set; }
         public string? OwnerPassword { get; set; }
         public string? OwnerFullName { get; set; }
@@ -508,5 +518,7 @@ namespace TallerCrowned.Controllers
         public bool? EnableWhatsappAlerts { get; set; }
         public bool? EnableInvoiceExport { get; set; }
         public bool? EnableProfitAndLoss { get; set; }
+        public bool? EnableDashboardRepairVehicles { get; set; }
+        public bool? EnableAccountsReceivable { get; set; }
     }
 }

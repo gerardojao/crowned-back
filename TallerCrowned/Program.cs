@@ -18,6 +18,11 @@ if (string.IsNullOrWhiteSpace(defaultConnection))
     throw new InvalidOperationException("Missing required configuration value: ConnectionStrings:DefaultConnection. Set it with the ConnectionStrings__DefaultConnection environment variable in production.");
 }
 
+if (env.IsDevelopment() && !IsLocalDevelopmentConnection(defaultConnection))
+{
+    throw new InvalidOperationException("Development must use a local database connection. Check user-secrets, environment variables, and appsettings.Development.json.");
+}
+
 var jwtKey = builder.Configuration["Jwt:Key"];
 if (string.IsNullOrWhiteSpace(jwtKey))
 {
@@ -206,4 +211,23 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+
+static bool IsLocalDevelopmentConnection(string connectionString)
+{
+    var normalized = connectionString.ToLowerInvariant();
+    var localMarkers = new[]
+    {
+        "(localdb)",
+        "server=localhost",
+        "data source=localhost",
+        "server=127.0.0.1",
+        "data source=127.0.0.1",
+        "server=.",
+        "data source=.",
+        "server=(local)",
+        "data source=(local)"
+    };
+
+    return localMarkers.Any(normalized.Contains);
+}
 

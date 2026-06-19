@@ -216,6 +216,14 @@ public partial class dbContext : DbContext
                 .HasDefaultValue(true)
                 .IsRequired();
 
+            b.Property(x => x.EnableDashboardRepairVehicles)
+                .HasDefaultValue(true)
+                .IsRequired();
+
+            b.Property(x => x.EnableAccountsReceivable)
+                .HasDefaultValue(true)
+                .IsRequired();
+
             b.Property(x => x.Activo).HasDefaultValue(true);
             b.Property(x => x.FechaCreacion).HasColumnType("datetime");
 
@@ -686,6 +694,20 @@ public partial class dbContext : DbContext
             b.Property(x => x.Iva).HasColumnType("decimal(18,2)");
             b.Property(x => x.Otros).HasColumnType("decimal(18,2)");
             b.Property(x => x.Total).HasColumnType("decimal(18,2)");
+            b.Property(x => x.TotalFactura).HasColumnType("decimal(18,2)");
+            b.Property(x => x.TotalAbonado).HasColumnType("decimal(18,2)");
+            b.Property(x => x.SaldoPendiente).HasColumnType("decimal(18,2)");
+            b.Property(x => x.FechaVencimiento).HasColumnType("datetime");
+            b.Property(x => x.TipoPago)
+                .HasMaxLength(20)
+                .IsUnicode(false)
+                .HasDefaultValue("Contado")
+                .IsRequired();
+            b.Property(x => x.EstadoCxC)
+                .HasMaxLength(20)
+                .IsUnicode(false)
+                .HasDefaultValue("Pagada")
+                .IsRequired();
 
             b.Property(x => x.Eliminado).HasDefaultValue(false);
 
@@ -698,6 +720,8 @@ public partial class dbContext : DbContext
             ConfigureWorkshopShadow<FacturaEmitida>(b);
             b.HasIndex(x => x.NumeroFactura).IsUnique();
             b.HasIndex(x => x.IdOrdenTrabajo);
+            b.HasIndex(x => x.EstadoCxC);
+            b.HasIndex(x => x.FechaVencimiento);
             b.HasIndex("UsuarioCreacion", "Eliminado");
         });
         modelBuilder.Entity<AlertaCliente>(b =>

@@ -49,6 +49,9 @@ namespace TallerCrowned.Controllers
                 Km = dto.Km,
                 Observaciones = dto.Observaciones,
                 Otros = dto.Otros,
+                TipoPago = dto.TipoPago,
+                TotalAbonado = dto.TotalAbonado,
+                FechaVencimiento = dto.FechaVencimiento,
                 Items = items,
                 ItemsJson = dto.ItemsJson
             };
@@ -117,6 +120,16 @@ namespace TallerCrowned.Controllers
                     ? Round2(subtotal * (ivaPct / 100m))
                     : 0m;
                 var total = Round2(subtotal + iva);
+                var tipoPago = NormalizeTipoPago(dto.TipoPago);
+                var totalFactura = total;
+                var totalAbonado = tipoPago == "Contado"
+                    ? totalFactura
+                    : Round2(Math.Clamp(dto.TotalAbonado ?? 0m, 0m, totalFactura));
+                var saldoPendiente = Round2(Math.Max(0m, totalFactura - totalAbonado));
+                DateTime? fechaVencimiento = tipoPago == "Credito"
+                    ? (dto.FechaVencimiento?.Date ?? fecha.Date.AddDays(NormalizePlazoCredito(dto.PlazoCreditoDias)))
+                    : null;
+                var estadoCxC = GetEstadoCxC(totalAbonado, saldoPendiente);
                 var itemsJson = JsonSerializer.Serialize(
                     items,
                     new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }
@@ -137,6 +150,12 @@ namespace TallerCrowned.Controllers
                     Iva = iva,
                     Otros = otros,
                     Total = total,
+                    TotalFactura = totalFactura,
+                    TotalAbonado = totalAbonado,
+                    SaldoPendiente = saldoPendiente,
+                    FechaVencimiento = fechaVencimiento,
+                    TipoPago = tipoPago,
+                    EstadoCxC = estadoCxC,
                     Observaciones = dto.Observaciones?.Trim(),
                     ItemsJson = itemsJson,
                     Eliminado = false
@@ -175,6 +194,12 @@ namespace TallerCrowned.Controllers
                     factura.Iva,
                     factura.Otros,
                     factura.Total,
+                    factura.TotalFactura,
+                    factura.TotalAbonado,
+                    factura.SaldoPendiente,
+                    factura.FechaVencimiento,
+                    factura.TipoPago,
+                    factura.EstadoCxC,
                     IvaPct = ivaPct
                 });
 
@@ -545,6 +570,116 @@ namespace TallerCrowned.Controllers
             }
         }
 
+        [HttpGet("cxc")]
+        public async Task<ActionResult> GetCuentasPorCobrar([FromQuery] string? estado = null)
+        {
+            var respuesta = new Respuesta<object>();
+
+            try
+            {
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
+
+                var query = _context.FacturasEmitidas
+                    .AsNoTracking()
+                    .Where(x =>
+                        !x.Eliminado &&
+                        EF.Property<int>(x, "WorkshopId") == workshopId.Value &&
+                        (x.TipoPago == "Credito" || x.SaldoPendiente > 0)
+                    );
+
+                if (!string.IsNullOrWhiteSpace(estado))
+                {
+                    var estadoNorm = NormalizeEstadoCxC(estado);
+                    query = query.Where(x => x.EstadoCxC == estadoNorm);
+                }
+
+                var items = await query
+                    .OrderBy(x => x.EstadoCxC == "Pagada")
+                    .ThenBy(x => x.FechaVencimiento ?? DateTime.MaxValue)
+                    .ThenByDescending(x => x.Fecha)
+                    .Select(x => new
+                    {
+                        x.Id,
+                        x.NumeroFactura,
+                        x.Fecha,
+                        x.Cliente,
+                        x.Dni,
+                        x.TelefonoCliente,
+                        x.Matricula,
+                        x.TotalFactura,
+                        x.TotalAbonado,
+                        x.SaldoPendiente,
+                        x.FechaVencimiento,
+                        x.TipoPago,
+                        x.EstadoCxC
+                    })
+                    .ToListAsync();
+
+                respuesta.Ok = 1;
+                respuesta.Message = "Cuentas por cobrar";
+                respuesta.Data.Add(items);
+                return Ok(respuesta);
+            }
+            catch (Exception e)
+            {
+                respuesta.Ok = 0;
+                respuesta.Message = e.Message + (e.InnerException != null ? " " + e.InnerException.Message : "");
+                return Ok(respuesta);
+            }
+        }
+
+        [HttpPut("{id:int}/abono")]
+        public async Task<ActionResult> RegistrarAbono(int id, [FromBody] FacturaAbonoDto dto)
+        {
+            var respuesta = new Respuesta<object>();
+
+            try
+            {
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
+
+                var factura = await _context.FacturasEmitidas.FirstOrDefaultAsync(x =>
+                    x.Id == id &&
+                    !x.Eliminado &&
+                    EF.Property<int>(x, "WorkshopId") == workshopId.Value
+                );
+
+                if (factura == null)
+                    return NotFound(new { message = "No existe la factura." });
+
+                var abono = Round2(dto.Importe);
+                if (abono <= 0)
+                    return BadRequest(new { message = "El abono debe ser mayor que 0." });
+
+                var totalFactura = factura.TotalFactura > 0 ? factura.TotalFactura : factura.Total;
+                factura.TotalFactura = totalFactura;
+                factura.TotalAbonado = Round2(Math.Min(totalFactura, factura.TotalAbonado + abono));
+                factura.SaldoPendiente = Round2(Math.Max(0m, totalFactura - factura.TotalAbonado));
+                factura.EstadoCxC = GetEstadoCxC(factura.TotalAbonado, factura.SaldoPendiente);
+
+                await _context.SaveChangesAsync();
+
+                respuesta.Ok = 1;
+                respuesta.Message = "Abono registrado.";
+                respuesta.Data.Add(new
+                {
+                    factura.Id,
+                    factura.TotalFactura,
+                    factura.TotalAbonado,
+                    factura.SaldoPendiente,
+                    factura.EstadoCxC
+                });
+                return Ok(respuesta);
+            }
+            catch (Exception e)
+            {
+                respuesta.Ok = 0;
+                respuesta.Message = e.Message + (e.InnerException != null ? " " + e.InnerException.Message : "");
+                return Ok(respuesta);
+            }
+        }
+
         [HttpGet("orden/{idOrden:int}")]
         public async Task<ActionResult> GetByOrden(int idOrden)
         {
@@ -651,6 +786,34 @@ namespace TallerCrowned.Controllers
         private static decimal Round2(decimal value)
         {
             return Math.Round(value, 2, MidpointRounding.AwayFromZero);
+        }
+
+        private static string NormalizeTipoPago(string? tipoPago)
+        {
+            var clean = NormalizarTexto(tipoPago ?? "Contado");
+            return clean == "credito" ? "Credito" : "Contado";
+        }
+
+        private static int NormalizePlazoCredito(int? plazo)
+        {
+            return plazo == 60 ? 60 : 30;
+        }
+
+        private static string NormalizeEstadoCxC(string? estado)
+        {
+            var clean = NormalizarTexto(estado ?? "");
+            return clean switch
+            {
+                "pagada" => "Pagada",
+                "parcial" => "Parcial",
+                _ => "Pendiente"
+            };
+        }
+
+        private static string GetEstadoCxC(decimal totalAbonado, decimal saldoPendiente)
+        {
+            if (saldoPendiente <= 0.009m) return "Pagada";
+            return totalAbonado > 0.009m ? "Parcial" : "Pendiente";
         }
 
         private static byte[] BuildInvoicePdf(FacturaEmitida factura)
@@ -810,8 +973,17 @@ namespace TallerCrowned.Controllers
         public string? Observaciones { get; set; }
         public int IvaPct { get; set; } = 21;
         public decimal Otros { get; set; }
+        public string? TipoPago { get; set; }
+        public decimal? TotalAbonado { get; set; }
+        public DateTime? FechaVencimiento { get; set; }
+        public int? PlazoCreditoDias { get; set; }
         public List<FacturaItemDTO>? Items { get; set; }
         public string? ItemsJson { get; set; }
+    }
+
+    public class FacturaAbonoDto
+    {
+        public decimal Importe { get; set; }
     }
 
     public class FacturaItemDTO
