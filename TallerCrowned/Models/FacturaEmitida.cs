@@ -26,6 +26,15 @@
         public DateTime? FechaVencimiento { get; set; }
         public string TipoPago { get; set; } = "Contado";
         public string EstadoCxC { get; set; } = "Pagada";
+        public int? BankAccountId { get; set; }
+        public string? BankAccountName { get; set; }
+        public string? BankAccountIban { get; set; }
+        public string TipoFactura { get; set; } = "Normal";
+        public int? FacturaOriginalId { get; set; }
+        public string? NumeroFacturaRectificada { get; set; }
+        public string? MotivoRectificacion { get; set; }
+        public decimal ImporteRectificado { get; set; }
+        public DateTime? FechaRectificacion { get; set; }
 
         public string? Observaciones { get; set; }
         public string ItemsJson { get; set; } = null!;

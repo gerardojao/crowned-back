@@ -102,11 +102,14 @@ public class OrdenTrabajoController : Controller
                         Cliente = x.Cliente,
                         Dni = x.Dni,
                         Telefono = x.Telefono,
+                        Direccion = x.Direccion,
                         Matricula = x.Matricula,
                         Marca = x.Marca,
                         Modelo = x.Modelo,
                         Kilometraje = x.Kilometraje,
                         Fecha = x.Fecha,
+                        FechaPrevistaEntrega = x.FechaPrevistaEntrega,
+                        TiempoEstimadoHoras = x.TiempoEstimadoHoras,
                         Trabajo = x.Trabajo,
                         ItemsJson = x.ItemsJson,
                         Repuestos = x.Repuestos,
@@ -166,11 +169,14 @@ public class OrdenTrabajoController : Controller
                         Cliente = x.Cliente,
                         Dni = x.Dni,
                         Telefono = x.Telefono,
+                        Direccion = x.Direccion,
                         Matricula = x.Matricula,
                         Marca = x.Marca,
                         Modelo = x.Modelo,
                         Kilometraje = x.Kilometraje,
                         Fecha = x.Fecha,
+                        FechaPrevistaEntrega = x.FechaPrevistaEntrega,
+                        TiempoEstimadoHoras = x.TiempoEstimadoHoras,
                         Trabajo = x.Trabajo,
                         ItemsJson = x.ItemsJson,
                         Repuestos = x.Repuestos,
@@ -219,11 +225,14 @@ public class OrdenTrabajoController : Controller
                         Cliente = x.Cliente,
                         Dni = x.Dni,
                         Telefono = x.Telefono,
+                        Direccion = x.Direccion,
                         Matricula = x.Matricula,
                         Marca = x.Marca,
                         Modelo = x.Modelo,
                         Kilometraje = x.Kilometraje,
                         Fecha = x.Fecha,
+                        FechaPrevistaEntrega = x.FechaPrevistaEntrega,
+                        TiempoEstimadoHoras = x.TiempoEstimadoHoras,
                         Trabajo = x.Trabajo,
                         ItemsJson = x.ItemsJson,
                         Repuestos = x.Repuestos,
@@ -240,6 +249,8 @@ public class OrdenTrabajoController : Controller
                     respuesta.Message = "No existe la orden o fue eliminada.";
                     return NotFound(respuesta);
                 }
+
+                await EnrichCustomerDataAsync(orden, workshopId.Value);
 
                 respuesta.Ok = 1;
                 respuesta.Message = "Orden encontrada";
@@ -282,11 +293,14 @@ public class OrdenTrabajoController : Controller
                     Cliente = dto.Cliente.Trim(),
                     Dni = dto.Dni?.Trim(),
                     Telefono = dto.Telefono?.Trim(),
+                    Direccion = dto.Direccion?.Trim(),
                     Matricula = dto.Matricula.Trim().ToUpper(),
                     Marca = dto.Marca?.Trim(),
                     Modelo = dto.Modelo.Trim(),
                     Kilometraje = dto.Kilometraje,
                     Fecha = dto.Fecha == default ? DateTime.Now : dto.Fecha,
+                    FechaPrevistaEntrega = dto.FechaPrevistaEntrega,
+                    TiempoEstimadoHoras = dto.TiempoEstimadoHoras,
                     Trabajo = dto.Trabajo.Trim(),
                     ItemsJson = dto.ItemsJson,
                     Repuestos = dto.Repuestos,
@@ -350,6 +364,7 @@ public class OrdenTrabajoController : Controller
                 if (!string.IsNullOrWhiteSpace(dto.Cliente)) orden.Cliente = dto.Cliente.Trim();
                 if (dto.Dni != null) orden.Dni = dto.Dni.Trim();
                 if (dto.Telefono != null) orden.Telefono = dto.Telefono.Trim();
+                if (dto.Direccion != null) orden.Direccion = dto.Direccion.Trim();
 
                 if (!string.IsNullOrWhiteSpace(dto.Matricula)) orden.Matricula = dto.Matricula.Trim().ToUpper();
                 if (dto.Marca != null) orden.Marca = dto.Marca.Trim();
@@ -357,6 +372,8 @@ public class OrdenTrabajoController : Controller
 
                 if (dto.Kilometraje.HasValue) orden.Kilometraje = dto.Kilometraje.Value;
                 if (dto.Fecha.HasValue) orden.Fecha = dto.Fecha.Value;
+                orden.FechaPrevistaEntrega = dto.FechaPrevistaEntrega;
+                orden.TiempoEstimadoHoras = dto.TiempoEstimadoHoras;
 
                 if (!string.IsNullOrWhiteSpace(dto.Trabajo)) orden.Trabajo = dto.Trabajo.Trim();
                 orden.ItemsJson = dto.ItemsJson;
@@ -503,6 +520,38 @@ public class OrdenTrabajoController : Controller
                 respuesta.Message = e.Message + (e.InnerException != null ? " " + e.InnerException.Message : "");
                 return Ok(respuesta);
             }
+        }
+
+        private async Task EnrichCustomerDataAsync(OrdenTrabajo orden, int workshopId)
+        {
+            var needsDni = string.IsNullOrWhiteSpace(orden.Dni);
+            var needsAddress = string.IsNullOrWhiteSpace(orden.Direccion);
+            if (!needsDni && !needsAddress) return;
+
+            var matricula = orden.Matricula?.Trim().ToUpper();
+            var telefono = orden.Telefono?.Trim();
+            var cliente = orden.Cliente?.Trim().ToLower();
+
+            var match = await _context.Clientes
+                .AsNoTracking()
+                .Where(x =>
+                    !x.Eliminado &&
+                    EF.Property<int>(x, "WorkshopId") == workshopId &&
+                    (
+                        (!string.IsNullOrEmpty(matricula) && x.Matricula.ToUpper() == matricula) ||
+                        (!string.IsNullOrEmpty(telefono) && x.Telefono == telefono) ||
+                        (!string.IsNullOrEmpty(cliente) && x.Nombre.ToLower() == cliente)
+                    )
+                )
+                .OrderByDescending(x => !string.IsNullOrEmpty(matricula) && x.Matricula.ToUpper() == matricula)
+                .ThenByDescending(x => !string.IsNullOrEmpty(telefono) && x.Telefono == telefono)
+                .FirstOrDefaultAsync();
+
+            if (match == null) return;
+
+            if (needsDni) orden.Dni = match.Dni;
+            if (string.IsNullOrWhiteSpace(orden.Telefono)) orden.Telefono = match.Telefono;
+            if (needsAddress) orden.Direccion = match.Direccion;
         }
     }
 

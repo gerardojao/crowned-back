@@ -11,6 +11,7 @@ namespace TallerCrowned.Models
         public string? Email { get; set; }
         public string? Iban { get; set; }
         public string SerieFactura { get; set; } = "A";
+        public string SerieFacturaRecambio { get; set; } = "RC";
         public string? LogoPath { get; set; }
         public string BusinessType { get; set; } = "automotive";
         public string TerminologyProfile { get; set; } = "automotive";
@@ -22,7 +23,11 @@ namespace TallerCrowned.Models
         public bool EnableInvoiceExport { get; set; } = true;
         public bool EnableProfitAndLoss { get; set; } = true;
         public bool EnableDashboardRepairVehicles { get; set; } = true;
+        public bool EnablePreOrders { get; set; } = true;
+        public bool EnableSpecialInvoices { get; set; } = true;
         public bool EnableAccountsReceivable { get; set; } = true;
+        public bool EnableLedger { get; set; } = true;
+        public bool AllowInvoiceClientEdit { get; set; } = false;
         public bool Activo { get; set; } = true;
         public DateTime FechaCreacion { get; set; } = DateTime.UtcNow;
     }

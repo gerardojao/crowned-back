@@ -88,6 +88,7 @@ namespace FamilyApp.Controllers
                 var ingre = await (from _Egreso in _context.Egresos
                                    join _fEgreso in _context.FichaEgresos on _Egreso.Id equals _fEgreso.NombreEgreso
                                    where !_fEgreso.Eliminado &&
+                                   EF.Property<int>(_Egreso, "WorkshopId") == workshopId.Value &&
                                    EF.Property<int>(_fEgreso, "WorkshopId") == workshopId.Value
                                    select new { _Egreso.Nombre, _Egreso.TipoGasto, _fEgreso.Importe })
                                   .OrderByDescending(x => x.Importe)
@@ -289,29 +290,29 @@ namespace FamilyApp.Controllers
 
                 var fi = fechaInicio?.Date;
                 var ffExcl = fechaFin?.Date.AddDays(1);
-                var detalles = await _context.FichaEgresos
-                    .AsNoTracking()
-                    .Where(f => !f.Eliminado
-                        && EF.Property<int>(f, "WorkshopId") == workshopId.Value
-                        && (!fi.HasValue || f.Fecha >= fi)
-                        && (!ffExcl.HasValue || f.Fecha < ffExcl)
-                        && (!tipoId.HasValue || f.NombreEgreso == tipoId.Value))
-                    .Join(_context.Egresos.AsNoTracking(),
-                          f => f.NombreEgreso,
-                          e => e.Id,
-                          (f, e) => new
-                          {
-                              Id = f.Id,
-                              Fecha = f.Fecha,
-                              Mes = f.Mes,
-                              TipoId = e.Id,
-                              Tipo = e.Nombre,
-                              TipoGasto = e.TipoGasto,
-                              Descripcion = f.Descripcion,
-                              Importe = f.Importe
-                          })
-                    .OrderByDescending(x => x.Fecha ?? DateTime.MinValue)
-                    .ThenByDescending(x => x.Id)
+                var detalles = await (from f in _context.FichaEgresos.AsNoTracking()
+                                      join e in _context.Egresos.AsNoTracking() on f.NombreEgreso equals e.Id
+                                      where !f.Eliminado
+                                         && EF.Property<int>(f, "WorkshopId") == workshopId.Value
+                                         && EF.Property<int>(e, "WorkshopId") == workshopId.Value
+                                         && (!fi.HasValue || f.Fecha >= fi)
+                                         && (!ffExcl.HasValue || f.Fecha < ffExcl)
+                                         && (!tipoId.HasValue || f.NombreEgreso == tipoId.Value)
+                                      orderby f.Fecha ?? DateTime.MinValue descending, f.Id descending
+                                      select new
+                                      {
+                                          Id = f.Id,
+                                          Fecha = f.Fecha,
+                                          Mes = f.Mes,
+                                          TipoId = e.Id,
+                                          Tipo = e.Nombre,
+                                          TipoGasto = e.TipoGasto,
+                                          Descripcion = f.Descripcion,
+                                          Importe = f.Importe,
+                                          f.BankAccountId,
+                                          f.BankAccountName,
+                                          f.BankAccountIban
+                                      })
                     .ToListAsync();
 
                 
@@ -347,6 +348,7 @@ namespace FamilyApp.Controllers
                 var egreT = await (from e in _context.Egresos.AsNoTracking()
                                    join f in _context.FichaEgresos.AsNoTracking() on e.Id equals f.NombreEgreso
                                    where !f.Eliminado
+                                      && EF.Property<int>(e, "WorkshopId") == workshopId.Value
                                       && EF.Property<int>(f, "WorkshopId") == workshopId.Value
                                       && f.Fecha.HasValue
                                       && f.Fecha.Value >= fi

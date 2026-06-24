@@ -5,6 +5,7 @@
         public string Cliente { get; set; } = null!;
         public string? Dni { get; set; }
         public string? Telefono { get; set; }
+        public string? Direccion { get; set; }
 
         public string Matricula { get; set; } = null!;
         public string? Marca { get; set; }
@@ -12,6 +13,8 @@
         public int? Kilometraje { get; set; }
 
         public DateTime Fecha { get; set; }
+        public DateTime? FechaPrevistaEntrega { get; set; }
+        public decimal? TiempoEstimadoHoras { get; set; }
 
         public string Trabajo { get; set; } = null!;
 

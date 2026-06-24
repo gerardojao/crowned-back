@@ -64,6 +64,7 @@ namespace TallerCrowned.Controllers
                 Email = section["Email"] ?? "multiservicioscrower@gmail.com",
                 Iban = section["Iban"] ?? "ES69 2100 4014 9122 0012 3843",
                 SerieFactura = section["SerieFactura"] ?? "A",
+                SerieFacturaRecambio = section["SerieFacturaRecambio"] ?? "RC",
                 LogoPath = section["LogoPath"],
                 LogoUrl = ToLogoUrl(section["LogoPath"]),
                 BusinessType = section["BusinessType"] ?? "automotive",
@@ -76,7 +77,11 @@ namespace TallerCrowned.Controllers
                 EnableInvoiceExport = true,
                 EnableProfitAndLoss = true,
                 EnableDashboardRepairVehicles = true,
-                EnableAccountsReceivable = true
+                EnablePreOrders = true,
+                EnableSpecialInvoices = true,
+                EnableAccountsReceivable = true,
+                EnableLedger = true,
+                AllowInvoiceClientEdit = false
             });
         }
 
@@ -122,6 +127,7 @@ namespace TallerCrowned.Controllers
                 Email = workshop.Email ?? "",
                 Iban = workshop.Iban ?? "",
                 SerieFactura = workshop.SerieFactura,
+                SerieFacturaRecambio = workshop.SerieFacturaRecambio,
                 LogoPath = workshop.LogoPath,
                 LogoUrl = ToLogoUrl(workshop.LogoPath),
                 BusinessType = string.IsNullOrWhiteSpace(workshop.BusinessType) ? "automotive" : workshop.BusinessType,
@@ -134,7 +140,11 @@ namespace TallerCrowned.Controllers
                 EnableInvoiceExport = workshop.EnableInvoiceExport,
                 EnableProfitAndLoss = workshop.EnableProfitAndLoss,
                 EnableDashboardRepairVehicles = workshop.EnableDashboardRepairVehicles,
-                EnableAccountsReceivable = workshop.EnableAccountsReceivable
+                EnablePreOrders = workshop.EnablePreOrders,
+                EnableSpecialInvoices = workshop.EnableSpecialInvoices,
+                EnableAccountsReceivable = workshop.EnableAccountsReceivable,
+                EnableLedger = workshop.EnableLedger,
+                AllowInvoiceClientEdit = workshop.AllowInvoiceClientEdit
             };
         }
 
@@ -160,6 +170,7 @@ namespace TallerCrowned.Controllers
         public string Email { get; set; } = null!;
         public string Iban { get; set; } = null!;
         public string SerieFactura { get; set; } = "A";
+        public string SerieFacturaRecambio { get; set; } = "RC";
         public string? LogoPath { get; set; }
         public string? LogoUrl { get; set; }
         public string BusinessType { get; set; } = "automotive";
@@ -172,6 +183,10 @@ namespace TallerCrowned.Controllers
         public bool EnableInvoiceExport { get; set; } = true;
         public bool EnableProfitAndLoss { get; set; } = true;
         public bool EnableDashboardRepairVehicles { get; set; } = true;
+        public bool EnablePreOrders { get; set; } = true;
+        public bool EnableSpecialInvoices { get; set; } = true;
         public bool EnableAccountsReceivable { get; set; } = true;
+        public bool EnableLedger { get; set; } = true;
+        public bool AllowInvoiceClientEdit { get; set; } = false;
     }
 }

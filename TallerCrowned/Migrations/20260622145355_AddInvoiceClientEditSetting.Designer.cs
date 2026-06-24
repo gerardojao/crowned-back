@@ -4,6 +4,7 @@ using FamilyApp.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace FamilyApp.Migrations
 {
     [DbContext(typeof(dbContext))]
-    partial class dbContextModelSnapshot : ModelSnapshot
+    [Migration("20260622145355_AddInvoiceClientEditSetting")]
+    partial class AddInvoiceClientEditSetting
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -117,19 +120,6 @@ namespace FamilyApp.Migrations
                         .HasColumnType("bit")
                         .HasDefaultValue(true);
 
-                    b.Property<string>("BankAccountIban")
-                        .HasMaxLength(50)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(50)");
-
-                    b.Property<int?>("BankAccountId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("BankAccountName")
-                        .HasMaxLength(120)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(120)");
-
                     b.Property<string>("Descripcion")
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
@@ -202,19 +192,6 @@ namespace FamilyApp.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bit")
                         .HasDefaultValue(true);
-
-                    b.Property<string>("BankAccountIban")
-                        .HasMaxLength(50)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(50)");
-
-                    b.Property<int?>("BankAccountId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("BankAccountName")
-                        .HasMaxLength(120)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(120)");
 
                     b.Property<string>("Descripcion")
                         .HasMaxLength(500)
@@ -544,19 +521,6 @@ namespace FamilyApp.Migrations
                         .HasColumnType("bit")
                         .HasDefaultValue(true);
 
-                    b.Property<string>("BankAccountIban")
-                        .HasMaxLength(50)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(50)");
-
-                    b.Property<int?>("BankAccountId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("BankAccountName")
-                        .HasMaxLength(120)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(120)");
-
                     b.Property<string>("Cliente")
                         .IsRequired()
                         .HasMaxLength(150)
@@ -878,11 +842,6 @@ namespace FamilyApp.Migrations
                         .IsUnicode(false)
                         .HasColumnType("varchar(150)");
 
-                    b.Property<string>("Direccion")
-                        .HasMaxLength(250)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(250)");
-
                     b.Property<string>("Dni")
                         .HasMaxLength(30)
                         .IsUnicode(false)
@@ -912,9 +871,6 @@ namespace FamilyApp.Migrations
 
                     b.Property<DateTime>("FechaModificacion")
                         .HasColumnType("datetime2");
-
-                    b.Property<DateTime?>("FechaPrevistaEntrega")
-                        .HasColumnType("datetime");
 
                     b.Property<string>("ItemsJson")
                         .HasColumnType("nvarchar(max)");
@@ -955,9 +911,6 @@ namespace FamilyApp.Migrations
                         .IsUnicode(false)
                         .HasColumnType("varchar(30)");
 
-                    b.Property<decimal?>("TiempoEstimadoHoras")
-                        .HasColumnType("decimal(18, 2)");
-
                     b.Property<string>("Trabajo")
                         .IsRequired()
                         .HasMaxLength(500)
@@ -986,139 +939,6 @@ namespace FamilyApp.Migrations
                     b.HasIndex("UsuarioCreacion", "Eliminado", "Fecha");
 
                     b.ToTable("OrdenTrabajo", (string)null);
-                });
-
-            modelBuilder.Entity("TallerCrowned.Models.PreOrdenTrabajo", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<bool>("Activo")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(true);
-
-                    b.Property<string>("Cliente")
-                        .IsRequired()
-                        .HasMaxLength(150)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(150)");
-
-                    b.Property<bool>("ConvertidaEnOrden")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(false);
-
-                    b.Property<string>("DiagnosticoMecanico")
-                        .HasMaxLength(1000)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(1000)");
-
-                    b.Property<string>("Direccion")
-                        .HasMaxLength(250)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(250)");
-
-                    b.Property<string>("Dni")
-                        .HasMaxLength(30)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(30)");
-
-                    b.Property<bool>("Eliminado")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(false);
-
-                    b.Property<string>("Estado")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(50)");
-
-                    b.Property<DateTime>("Fecha")
-                        .HasColumnType("datetime");
-
-                    b.Property<DateTime>("FechaCreacion")
-                        .HasColumnType("datetime2");
-
-                    b.Property<DateTime>("FechaModificacion")
-                        .HasColumnType("datetime2");
-
-                    b.Property<DateTime?>("FechaPrevistaEntrega")
-                        .HasColumnType("datetime");
-
-                    b.Property<int?>("IdOrdenTrabajo")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("Kilometraje")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Marca")
-                        .HasMaxLength(80)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(80)");
-
-                    b.Property<string>("Matricula")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(20)");
-
-                    b.Property<string>("Modelo")
-                        .IsRequired()
-                        .HasMaxLength(80)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(80)");
-
-                    b.Property<string>("MotivoRecepcion")
-                        .IsRequired()
-                        .HasMaxLength(1000)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(1000)");
-
-                    b.Property<string>("Observaciones")
-                        .HasMaxLength(500)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(500)");
-
-                    b.Property<string>("RepuestosNecesarios")
-                        .HasMaxLength(1000)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(1000)");
-
-                    b.Property<string>("Telefono")
-                        .HasMaxLength(30)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(30)");
-
-                    b.Property<decimal?>("TiempoEstimadoHoras")
-                        .HasColumnType("decimal(18, 2)");
-
-                    b.Property<string>("UsuarioCreacion")
-                        .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)");
-
-                    b.Property<string>("UsuarioModificacion")
-                        .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)");
-
-                    b.Property<int>("WorkshopId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasDefaultValue(1);
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Matricula");
-
-                    b.HasIndex("WorkshopId");
-
-                    b.HasIndex("UsuarioCreacion", "Eliminado", "Fecha");
-
-                    b.ToTable("PreOrdenTrabajo", (string)null);
                 });
 
             modelBuilder.Entity("TallerCrowned.Models.Presupuesto", b =>
@@ -1611,17 +1431,7 @@ namespace FamilyApp.Migrations
                         .HasColumnType("bit")
                         .HasDefaultValue(true);
 
-                    b.Property<bool>("EnablePreOrders")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(true);
-
                     b.Property<bool>("EnableProfitAndLoss")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(true);
-
-                    b.Property<bool>("EnableSpecialInvoices")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bit")
                         .HasDefaultValue(true);
@@ -1682,14 +1492,6 @@ namespace FamilyApp.Migrations
                         .HasColumnType("varchar(20)")
                         .HasDefaultValue("A");
 
-                    b.Property<string>("SerieFacturaRecambio")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(20)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(20)")
-                        .HasDefaultValue("RC");
-
                     b.Property<string>("Telefono")
                         .HasMaxLength(50)
                         .IsUnicode(false)
@@ -1713,51 +1515,6 @@ namespace FamilyApp.Migrations
                     b.HasIndex("Nif");
 
                     b.ToTable("Workshop", (string)null);
-                });
-
-            modelBuilder.Entity("TallerCrowned.Models.WorkshopBankAccount", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<bool>("Activo")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(true);
-
-                    b.Property<bool>("EsPrincipal")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(false);
-
-                    b.Property<DateTime>("FechaCreacion")
-                        .HasColumnType("datetime");
-
-                    b.Property<string>("Iban")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(50)");
-
-                    b.Property<string>("Nombre")
-                        .IsRequired()
-                        .HasMaxLength(120)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(120)");
-
-                    b.Property<int>("WorkshopId")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("WorkshopId", "Activo");
-
-                    b.HasIndex("WorkshopId", "Iban");
-
-                    b.ToTable("WorkshopBankAccount", (string)null);
                 });
 
             modelBuilder.Entity("TallerCrowned.Models.WorkshopUser", b =>
@@ -1901,15 +1658,6 @@ namespace FamilyApp.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("TallerCrowned.Models.PreOrdenTrabajo", b =>
-                {
-                    b.HasOne("TallerCrowned.Models.Workshop", null)
-                        .WithMany()
-                        .HasForeignKey("WorkshopId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("TallerCrowned.Models.Presupuesto", b =>
                 {
                     b.HasOne("TallerCrowned.Models.Workshop", null)
@@ -1951,17 +1699,6 @@ namespace FamilyApp.Migrations
                         .HasForeignKey("WorkshopId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-                });
-
-            modelBuilder.Entity("TallerCrowned.Models.WorkshopBankAccount", b =>
-                {
-                    b.HasOne("TallerCrowned.Models.Workshop", "Workshop")
-                        .WithMany()
-                        .HasForeignKey("WorkshopId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Workshop");
                 });
 
             modelBuilder.Entity("TallerCrowned.Models.WorkshopUser", b =>

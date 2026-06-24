@@ -4,6 +4,7 @@ using FamilyApp.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace FamilyApp.Migrations
 {
     [DbContext(typeof(dbContext))]
-    partial class dbContextModelSnapshot : ModelSnapshot
+    [Migration("20260624064854_AddWorkshopPreOrdersModule")]
+    partial class AddWorkshopPreOrdersModule
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1621,11 +1624,6 @@ namespace FamilyApp.Migrations
                         .HasColumnType("bit")
                         .HasDefaultValue(true);
 
-                    b.Property<bool>("EnableSpecialInvoices")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(true);
-
                     b.Property<bool>("EnableWhatsappAlerts")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bit")
@@ -1681,14 +1679,6 @@ namespace FamilyApp.Migrations
                         .IsUnicode(false)
                         .HasColumnType("varchar(20)")
                         .HasDefaultValue("A");
-
-                    b.Property<string>("SerieFacturaRecambio")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(20)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(20)")
-                        .HasDefaultValue("RC");
 
                     b.Property<string>("Telefono")
                         .HasMaxLength(50)

@@ -1,9 +1,7 @@
-﻿namespace TallerCrowned.Models
+namespace TallerCrowned.DTOs.PreOrdenTrabajo
 {
-    public class OrdenTrabajo
+    public class PreOrdenTrabajoCreateDto
     {
-        public int Id { get; set; }
-
         public string Cliente { get; set; } = null!;
         public string? Dni { get; set; }
         public string? Telefono { get; set; }
@@ -18,19 +16,9 @@
         public DateTime? FechaPrevistaEntrega { get; set; }
         public decimal? TiempoEstimadoHoras { get; set; }
 
-        public string Trabajo { get; set; } = null!;
-
-        public decimal Repuestos { get; set; }
-        public decimal Cantidad { get; set; } = 1;
-        public decimal ManoObra { get; set; }
-        public decimal Estimado => ManoObra + (Repuestos * Cantidad);
-        public string? ItemsJson { get; set; }
-
-        public string Estado { get; set; } = "Recibido";
-
+        public string MotivoRecepcion { get; set; } = null!;
+        public string? DiagnosticoMecanico { get; set; }
+        public string? RepuestosNecesarios { get; set; }
         public string? Observaciones { get; set; }
-        public bool Facturada { get; set; }
-
-        public bool Eliminado { get; set; }
     }
 }

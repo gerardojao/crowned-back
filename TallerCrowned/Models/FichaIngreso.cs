@@ -20,6 +20,10 @@ public partial class FichaIngreso
 
     public decimal Importe { get; set; }
 
+    public int? BankAccountId { get; set; }
+    public string? BankAccountName { get; set; }
+    public string? BankAccountIban { get; set; }
+
     // --- Soft delete ---
     public bool Eliminado { get; set; }          // default false
     public DateTime? FechaEliminacion { get; set; }

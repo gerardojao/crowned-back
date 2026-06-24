@@ -4,6 +4,7 @@ using FamilyApp.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace FamilyApp.Migrations
 {
     [DbContext(typeof(dbContext))]
-    partial class dbContextModelSnapshot : ModelSnapshot
+    [Migration("20260622202012_AddPreOrdenTrabajo")]
+    partial class AddPreOrdenTrabajo
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -878,11 +881,6 @@ namespace FamilyApp.Migrations
                         .IsUnicode(false)
                         .HasColumnType("varchar(150)");
 
-                    b.Property<string>("Direccion")
-                        .HasMaxLength(250)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(250)");
-
                     b.Property<string>("Dni")
                         .HasMaxLength(30)
                         .IsUnicode(false)
@@ -912,9 +910,6 @@ namespace FamilyApp.Migrations
 
                     b.Property<DateTime>("FechaModificacion")
                         .HasColumnType("datetime2");
-
-                    b.Property<DateTime?>("FechaPrevistaEntrega")
-                        .HasColumnType("datetime");
 
                     b.Property<string>("ItemsJson")
                         .HasColumnType("nvarchar(max)");
@@ -954,9 +949,6 @@ namespace FamilyApp.Migrations
                         .HasMaxLength(30)
                         .IsUnicode(false)
                         .HasColumnType("varchar(30)");
-
-                    b.Property<decimal?>("TiempoEstimadoHoras")
-                        .HasColumnType("decimal(18, 2)");
 
                     b.Property<string>("Trabajo")
                         .IsRequired()
@@ -1017,11 +1009,6 @@ namespace FamilyApp.Migrations
                         .IsUnicode(false)
                         .HasColumnType("varchar(1000)");
 
-                    b.Property<string>("Direccion")
-                        .HasMaxLength(250)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(250)");
-
                     b.Property<string>("Dni")
                         .HasMaxLength(30)
                         .IsUnicode(false)
@@ -1046,9 +1033,6 @@ namespace FamilyApp.Migrations
 
                     b.Property<DateTime>("FechaModificacion")
                         .HasColumnType("datetime2");
-
-                    b.Property<DateTime?>("FechaPrevistaEntrega")
-                        .HasColumnType("datetime");
 
                     b.Property<int?>("IdOrdenTrabajo")
                         .HasColumnType("int");
@@ -1093,9 +1077,6 @@ namespace FamilyApp.Migrations
                         .HasMaxLength(30)
                         .IsUnicode(false)
                         .HasColumnType("varchar(30)");
-
-                    b.Property<decimal?>("TiempoEstimadoHoras")
-                        .HasColumnType("decimal(18, 2)");
 
                     b.Property<string>("UsuarioCreacion")
                         .HasMaxLength(64)
@@ -1611,17 +1592,7 @@ namespace FamilyApp.Migrations
                         .HasColumnType("bit")
                         .HasDefaultValue(true);
 
-                    b.Property<bool>("EnablePreOrders")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(true);
-
                     b.Property<bool>("EnableProfitAndLoss")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(true);
-
-                    b.Property<bool>("EnableSpecialInvoices")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bit")
                         .HasDefaultValue(true);
@@ -1681,14 +1652,6 @@ namespace FamilyApp.Migrations
                         .IsUnicode(false)
                         .HasColumnType("varchar(20)")
                         .HasDefaultValue("A");
-
-                    b.Property<string>("SerieFacturaRecambio")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(20)
-                        .IsUnicode(false)
-                        .HasColumnType("varchar(20)")
-                        .HasDefaultValue("RC");
 
                     b.Property<string>("Telefono")
                         .HasMaxLength(50)

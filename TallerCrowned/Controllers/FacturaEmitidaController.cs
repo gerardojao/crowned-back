@@ -8,6 +8,7 @@ using System.Globalization;
 using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using TallerCrowned.Models;
 
@@ -52,6 +53,8 @@ namespace TallerCrowned.Controllers
                 TipoPago = dto.TipoPago,
                 TotalAbonado = dto.TotalAbonado,
                 FechaVencimiento = dto.FechaVencimiento,
+                BankAccountId = dto.BankAccountId,
+                TipoFactura = dto.TipoFactura,
                 Items = items,
                 ItemsJson = dto.ItemsJson
             };
@@ -76,8 +79,26 @@ namespace TallerCrowned.Controllers
 
                 var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
                 if (!workshopId.HasValue) return Forbid();
+                var workshop = await _context.Workshops
+                    .AsNoTracking()
+                    .Where(x => x.Id == workshopId.Value && x.Activo)
+                    .Select(x => new
+                    {
+                        x.EnableSpecialInvoices,
+                        x.SerieFacturaRecambio
+                    })
+                    .FirstOrDefaultAsync();
+                if (workshop == null) return Forbid();
+
                 var ownerKey = GetOwnerKey();
-                var serie = NormalizeSerie(dto.Serie);
+                var tipoFactura = NormalizeTipoFactura(dto.TipoFactura);
+                if (tipoFactura == "Recambio" && !workshop.EnableSpecialInvoices)
+                    return StatusCode(403, new { message = "El modulo de facturas especiales no esta habilitado para este taller." });
+
+                var serieBase = tipoFactura == "Recambio" && string.IsNullOrWhiteSpace(dto.Serie)
+                    ? workshop.SerieFacturaRecambio
+                    : dto.Serie;
+                var serie = NormalizeSerie(serieBase, tipoFactura == "Recambio" ? "RC" : "A");
                 var anio = DateTime.Now.Year;
                 var fecha = dto.Fecha ?? DateTime.UtcNow;
                 var items = NormalizeItems(dto.Items, dto.ItemsJson);
@@ -85,15 +106,26 @@ namespace TallerCrowned.Controllers
                 if (items.Count == 0)
                     return BadRequest(new { message = "La factura debe tener al menos una linea con importe mayor que 0." });
 
+                if (tipoFactura == "Recambio")
+                {
+                    dto.IdOrdenTrabajo = null;
+                    foreach (var item in items)
+                    {
+                        item.Tipo = "Recambio";
+                        item.Kind = "Recambio";
+                    }
+                }
+
+                OrdenTrabajo? ordenFactura = null;
                 if (dto.IdOrdenTrabajo.HasValue)
                 {
-                    var ordenExiste = await _context.OrdenesTrabajo.AnyAsync(x =>
+                    ordenFactura = await _context.OrdenesTrabajo.FirstOrDefaultAsync(x =>
                         x.Id == dto.IdOrdenTrabajo.Value &&
                         !x.Eliminado &&
                         EF.Property<int>(x, "WorkshopId") == workshopId.Value
                     );
 
-                    if (!ordenExiste)
+                    if (ordenFactura == null)
                         return NotFound(new { message = "No existe la orden o no pertenece al usuario actual." });
                 }
 
@@ -122,14 +154,18 @@ namespace TallerCrowned.Controllers
                 var total = Round2(subtotal + iva);
                 var tipoPago = NormalizeTipoPago(dto.TipoPago);
                 var totalFactura = total;
-                var totalAbonado = tipoPago == "Contado"
-                    ? totalFactura
-                    : Round2(Math.Clamp(dto.TotalAbonado ?? 0m, 0m, totalFactura));
+                var totalAbonado = IsPagoCredito(tipoPago)
+                    ? Round2(Math.Clamp(dto.TotalAbonado ?? 0m, 0m, totalFactura))
+                    : totalFactura;
                 var saldoPendiente = Round2(Math.Max(0m, totalFactura - totalAbonado));
-                DateTime? fechaVencimiento = tipoPago == "Credito"
+                DateTime? fechaVencimiento = IsPagoCredito(tipoPago)
                     ? (dto.FechaVencimiento?.Date ?? fecha.Date.AddDays(NormalizePlazoCredito(dto.PlazoCreditoDias)))
                     : null;
                 var estadoCxC = GetEstadoCxC(totalAbonado, saldoPendiente);
+                var bank = IsPagoCredito(tipoPago)
+                    ? null
+                    : await ResolveBankAccount(workshopId.Value, dto.BankAccountId);
+                var clienteDb = await FindClienteForFactura(dto, ordenFactura, workshopId.Value);
                 var itemsJson = JsonSerializer.Serialize(
                     items,
                     new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }
@@ -141,11 +177,11 @@ namespace TallerCrowned.Controllers
                     IdOrdenTrabajo = dto.IdOrdenTrabajo,
                     Fecha = fecha,
                     Cliente = dto.Cliente.Trim(),
-                    Dni = dto.Dni?.Trim(),
-                    DireccionCliente = dto.DireccionCliente?.Trim(),
-                    TelefonoCliente = dto.TelefonoCliente?.Trim(),
-                    Matricula = dto.Matricula?.Trim().ToUpperInvariant(),
-                    Km = dto.Km?.Trim(),
+                    Dni = FirstNonEmpty(dto.Dni, ordenFactura?.Dni, clienteDb?.Dni),
+                    DireccionCliente = FirstNonEmpty(dto.DireccionCliente, ordenFactura?.Direccion, clienteDb?.Direccion),
+                    TelefonoCliente = FirstNonEmpty(dto.TelefonoCliente, ordenFactura?.Telefono, clienteDb?.Telefono),
+                    Matricula = FirstNonEmpty(dto.Matricula, ordenFactura?.Matricula, clienteDb?.Matricula)?.ToUpperInvariant(),
+                    Km = FirstNonEmpty(dto.Km, ordenFactura?.Kilometraje?.ToString(CultureInfo.InvariantCulture), clienteDb?.Kilometraje?.ToString(CultureInfo.InvariantCulture)),
                     Subtotal = subtotal,
                     Iva = iva,
                     Otros = otros,
@@ -156,6 +192,10 @@ namespace TallerCrowned.Controllers
                     FechaVencimiento = fechaVencimiento,
                     TipoPago = tipoPago,
                     EstadoCxC = estadoCxC,
+                    BankAccountId = bank?.Id,
+                    BankAccountName = bank?.Nombre,
+                    BankAccountIban = bank?.Iban,
+                    TipoFactura = tipoFactura,
                     Observaciones = dto.Observaciones?.Trim(),
                     ItemsJson = itemsJson,
                     Eliminado = false
@@ -168,7 +208,7 @@ namespace TallerCrowned.Controllers
                 await CrearIngresoAutomaticoSiAplica(factura, items, workshopId.Value);
                 await CrearRentabilidadRepuestosFacturados(factura, items, workshopId.Value);
 
-                if (factura.IdOrdenTrabajo.HasValue)
+                if (factura.TipoFactura == "Normal" && factura.IdOrdenTrabajo.HasValue)
                 {
                     var orden = await _context.OrdenesTrabajo.FirstOrDefaultAsync(x =>
                         x.Id == factura.IdOrdenTrabajo.Value &&
@@ -200,7 +240,169 @@ namespace TallerCrowned.Controllers
                     factura.FechaVencimiento,
                     factura.TipoPago,
                     factura.EstadoCxC,
+                    factura.BankAccountId,
+                    factura.BankAccountName,
+                    factura.BankAccountIban,
+                    factura.TipoFactura,
+                    LeyendaPago = BuildLeyendaPago(factura),
                     IvaPct = ivaPct
+                });
+
+                return Ok(respuesta);
+            }
+            catch (Exception e)
+            {
+                respuesta.Ok = 0;
+                respuesta.Message = e.Message + (e.InnerException != null ? " " + e.InnerException.Message : "");
+                return Ok(respuesta);
+            }
+        }
+
+        [HttpPost("{id:int}/rectificativa")]
+        public async Task<ActionResult> CrearRectificativa(int id, [FromBody] FacturaRectificativaCreateDto dto)
+        {
+            var respuesta = new Respuesta<object>();
+
+            try
+            {
+                var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
+                if (!workshopId.HasValue) return Forbid();
+
+                var original = await _context.FacturasEmitidas
+                    .FirstOrDefaultAsync(x =>
+                        x.Id == id &&
+                        !x.Eliminado &&
+                        EF.Property<int>(x, "WorkshopId") == workshopId.Value);
+
+                if (original == null)
+                    return NotFound(new { message = "No existe la factura original." });
+
+                if (original.TipoFactura == "Rectificativa")
+                    return BadRequest(new { message = "No se puede rectificar una factura rectificativa." });
+
+                var motivo = dto.Motivo?.Trim();
+                if (string.IsNullOrWhiteSpace(motivo))
+                    return BadRequest(new { message = "El motivo de rectificacion es requerido." });
+
+                var totalOriginal = original.TotalFactura > 0 ? original.TotalFactura : original.Total;
+                if (totalOriginal <= 0)
+                    return BadRequest(new { message = "La factura original no tiene total rectificable." });
+
+                var tipo = NormalizeTipoRectificativa(dto.Tipo);
+                var fecha = dto.Fecha?.Date ?? DateTime.UtcNow.Date;
+                var baseOriginal = original.Subtotal > 0
+                    ? original.Subtotal
+                    : Round2(totalOriginal / 1.21m);
+                var baseRectificar = tipo == "Total"
+                    ? baseOriginal
+                    : Round2(dto.Importe ?? 0m);
+
+                if (baseRectificar <= 0)
+                    return BadRequest(new { message = "La base imponible a rectificar debe ser mayor que 0." });
+
+                if (baseRectificar > baseOriginal)
+                    return BadRequest(new { message = "La base imponible a rectificar no puede superar la base imponible de la factura original." });
+
+                var ivaPct = original.Subtotal > 0
+                    ? Round2((original.Iva / original.Subtotal) * 100m)
+                    : 21m;
+
+                var rectSubtotal = Round2(-baseRectificar);
+                var rectIva = Round2(rectSubtotal * ivaPct / 100m);
+                var rectTotal = Round2(rectSubtotal + rectIva);
+
+                var rectItems = tipo == "Total"
+                    ? DeserializeItems(original.ItemsJson)
+                        .Select(x => new FacturaItemDTO
+                        {
+                            Descripcion = $"Rectificacion {x.Descripcion}",
+                            Cantidad = x.Cantidad,
+                            Importe = -Round2(x.Importe),
+                            Tipo = x.Tipo,
+                            Kind = x.Kind,
+                            RepuestoStockId = x.RepuestoStockId,
+                            IdRepuesto = x.IdRepuesto,
+                            IdProveedor = x.IdProveedor,
+                            NombreProveedor = x.NombreProveedor,
+                            PrecioCompra = x.PrecioCompra
+                        })
+                        .ToList()
+                    : new List<FacturaItemDTO>
+                    {
+                        new()
+                        {
+                            Descripcion = string.IsNullOrWhiteSpace(dto.Descripcion)
+                                ? $"Rectificacion parcial factura {original.NumeroFactura}"
+                                : dto.Descripcion.Trim(),
+                            Cantidad = 1,
+                            Importe = rectSubtotal
+                        }
+                    };
+
+                await using var transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
+
+                var anio = DateTime.Now.Year;
+                var numeroFactura = await GenerateNumeroFactura(workshopId.Value, GetOwnerKey(), "R", anio);
+                var itemsJson = JsonSerializer.Serialize(
+                    rectItems,
+                    new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+
+                var rectificativa = new FacturaEmitida
+                {
+                    NumeroFactura = numeroFactura,
+                    IdOrdenTrabajo = original.IdOrdenTrabajo,
+                    Fecha = fecha,
+                    Cliente = original.Cliente,
+                    Dni = original.Dni,
+                    DireccionCliente = original.DireccionCliente,
+                    TelefonoCliente = original.TelefonoCliente,
+                    Matricula = original.Matricula,
+                    Km = original.Km,
+                    Subtotal = rectSubtotal,
+                    Iva = rectIva,
+                    Otros = 0,
+                    Total = rectTotal,
+                    TotalFactura = rectTotal,
+                    TotalAbonado = rectTotal,
+                    SaldoPendiente = 0,
+                    FechaVencimiento = null,
+                    TipoPago = "Contado",
+                    EstadoCxC = "Pagada",
+                    BankAccountId = original.BankAccountId,
+                    BankAccountName = original.BankAccountName,
+                    BankAccountIban = original.BankAccountIban,
+                    TipoFactura = "Rectificativa",
+                    FacturaOriginalId = original.Id,
+                    NumeroFacturaRectificada = original.NumeroFactura,
+                    MotivoRectificacion = motivo,
+                    ImporteRectificado = Round2(baseRectificar),
+                    FechaRectificacion = fecha,
+                    Observaciones = $"Rectifica factura {original.NumeroFactura}. Motivo: {motivo}",
+                    ItemsJson = itemsJson,
+                    Eliminado = false
+                };
+
+                _context.FacturasEmitidas.Add(rectificativa);
+                _context.Entry(rectificativa).Property("WorkshopId").CurrentValue = workshopId.Value;
+                await _context.SaveChangesAsync();
+
+                await CrearIngresoRectificativa(rectificativa, workshopId.Value);
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                respuesta.Ok = 1;
+                respuesta.Message = "Factura rectificativa creada correctamente.";
+                respuesta.Data.Add(new
+                {
+                    rectificativa.Id,
+                    rectificativa.NumeroFactura,
+                    rectificativa.NumeroFacturaRectificada,
+                    rectificativa.Subtotal,
+                    rectificativa.Iva,
+                    rectificativa.Total,
+                    rectificativa.TotalFactura,
+                    rectificativa.TotalAbonado,
+                    rectificativa.TipoFactura
                 });
 
                 return Ok(respuesta);
@@ -244,6 +446,9 @@ namespace TallerCrowned.Controllers
 
         private async Task CrearIngresoAutomaticoSiAplica(FacturaEmitida factura, List<FacturaItemDTO> items, int workshopId)
         {
+            if (IsPagoCredito(factura.TipoPago))
+                return;
+
             if (items.Count == 0)
                 return;
 
@@ -340,6 +545,9 @@ namespace TallerCrowned.Controllers
                         Mes = factura.Fecha.ToString("MMMM", new CultureInfo("es-ES")),
                         Descripcion = $"Factura {factura.NumeroFactura} - {factura.Cliente} - {descripcionOriginal}",
                         Importe = importe,
+                        BankAccountId = factura.BankAccountId,
+                        BankAccountName = factura.BankAccountName,
+                        BankAccountIban = factura.BankAccountIban,
                         Eliminado = false,
                         FechaEliminacion = null
                     };
@@ -429,7 +637,7 @@ namespace TallerCrowned.Controllers
                 var precioVenta = Round2(item.Importe);
                 var categoria = EsLineaRepuesto(item) || repuestoBase != null
                     ? "Repuesto facturado"
-                    : NormalizarTexto(item.Kind ?? item.Tipo ?? "") == "labor"
+                    : NormalizarTexto(item.Tipo ?? item.Kind ?? "") == "servicio"
                         ? "Mano de obra facturada"
                         : "Concepto facturado";
 
@@ -461,33 +669,96 @@ namespace TallerCrowned.Controllers
             }
         }
 
+        private async Task CrearIngresoRectificativa(FacturaEmitida rectificativa, int workshopId)
+        {
+            var cuentaIngreso = await _context.Ingresos
+                .FirstOrDefaultAsync(x =>
+                    x.NombreIngreso.ToLower() == "rectificaciones" &&
+                    EF.Property<int>(x, "WorkshopId") == workshopId);
+
+            if (cuentaIngreso == null)
+            {
+                cuentaIngreso = new Ingreso { NombreIngreso = "Rectificaciones" };
+                _context.Ingresos.Add(cuentaIngreso);
+                _context.Entry(cuentaIngreso).Property("WorkshopId").CurrentValue = workshopId;
+                await _context.SaveChangesAsync();
+            }
+
+            var yaExiste = await _context.FichaIngresos.AnyAsync(x =>
+                !x.Eliminado &&
+                x.NombreIngreso == cuentaIngreso.Id &&
+                EF.Property<int>(x, "WorkshopId") == workshopId &&
+                x.Descripcion != null &&
+                x.Descripcion.Contains(rectificativa.NumeroFactura));
+
+            if (yaExiste)
+                return;
+
+            var fichaIngreso = new FichaIngreso
+            {
+                NombreIngreso = cuentaIngreso.Id,
+                Fecha = rectificativa.Fecha,
+                Mes = rectificativa.Fecha.ToString("MMMM", new CultureInfo("es-ES")),
+                Descripcion = $"Factura rectificativa {rectificativa.NumeroFactura} sobre {rectificativa.NumeroFacturaRectificada} - {rectificativa.MotivoRectificacion}",
+                Importe = rectificativa.Total,
+                BankAccountId = rectificativa.BankAccountId,
+                BankAccountName = rectificativa.BankAccountName,
+                BankAccountIban = rectificativa.BankAccountIban,
+                Eliminado = false,
+                FechaEliminacion = null
+            };
+
+            _context.FichaIngresos.Add(fichaIngreso);
+            _context.Entry(fichaIngreso).Property("WorkshopId").CurrentValue = workshopId;
+        }
+
         private static List<FacturaItemDTO> NormalizeItems(List<FacturaItemDTO>? items, string? itemsJson)
         {
             var source = items is { Count: > 0 } ? items : DeserializeItems(itemsJson);
 
             return source
                 .Where(x => !string.IsNullOrWhiteSpace(x.Descripcion))
-                .Select(x => new FacturaItemDTO
+                .Select(x =>
                 {
-                    Descripcion = x.Descripcion?.Trim(),
-                    Cantidad = x.Cantidad <= 0 ? 1 : Round2(x.Cantidad),
-                    Importe = Round2(x.Importe),
-                    Tipo = x.Tipo?.Trim(),
-                    Kind = x.Kind?.Trim(),
-                    RepuestoStockId = x.RepuestoStockId,
-                    IdRepuesto = x.IdRepuesto,
-                    IdProveedor = x.IdProveedor,
-                    NombreProveedor = x.NombreProveedor?.Trim(),
-                    PrecioCompra = x.PrecioCompra.HasValue ? Round2(x.PrecioCompra.Value) : null
+                    var item = NormalizeFacturaItem(x);
+                    item.Cantidad = item.Cantidad <= 0 ? 1 : Round2(item.Cantidad);
+                    item.Importe = Round2(item.Importe);
+                    item.PrecioCompra = item.PrecioCompra.HasValue ? Round2(item.PrecioCompra.Value) : null;
+                    return item;
                 })
                 .Where(x => Round2(x.Cantidad * x.Importe) > 0)
                 .ToList();
         }
 
+        private static FacturaItemDTO NormalizeFacturaItem(FacturaItemDTO item)
+        {
+            var importe = item.Importe != 0 ? item.Importe : item.Precio ?? 0m;
+            var tipo = NormalizeLineaTipo(item);
+
+            return new FacturaItemDTO
+            {
+                Descripcion = item.Descripcion?.Trim(),
+                Cantidad = item.Cantidad,
+                Importe = importe,
+                Tipo = tipo,
+                Kind = tipo,
+                RepuestoStockId = item.RepuestoStockId,
+                IdRepuesto = item.IdRepuesto,
+                IdProveedor = item.IdProveedor,
+                NombreProveedor = item.NombreProveedor?.Trim(),
+                PrecioCompra = item.PrecioCompra
+            };
+        }
+
+        private static string NormalizeLineaTipo(FacturaItemDTO item)
+        {
+            return EsLineaRepuesto(item) ? "Recambio" : "Servicio";
+        }
+
         private static bool EsLineaRepuesto(FacturaItemDTO item)
         {
             var tipo = NormalizarTexto(item.Tipo ?? item.Kind ?? "");
-            if (tipo is "repuesto" or "repuestos" or "part" or "parts")
+            if (tipo is "repuesto" or "repuestos" or "recambio" or "recambios" or "part" or "parts" or "material" or "materiales")
                 return true;
 
             if (item.RepuestoStockId.HasValue || item.IdRepuesto.HasValue || item.PrecioCompra.HasValue || item.IdProveedor.HasValue)
@@ -558,7 +829,7 @@ namespace TallerCrowned.Controllers
 
                 respuesta.Ok = 1;
                 respuesta.Message = "Factura encontrada.";
-                respuesta.Data.Add(factura);
+                respuesta.Data.Add(await BuildFacturaResponse(factura, workshopId.Value));
 
                 return Ok(respuesta);
             }
@@ -695,6 +966,7 @@ namespace TallerCrowned.Controllers
                     .Where(x =>
                         x.IdOrdenTrabajo == idOrden &&
                         !x.Eliminado &&
+                        x.TipoFactura != "Rectificativa" &&
                         EF.Property<int>(x, "WorkshopId") == workshopId.Value
                     )
                     .OrderByDescending(x => x.Fecha)
@@ -709,7 +981,7 @@ namespace TallerCrowned.Controllers
 
                 respuesta.Ok = 1;
                 respuesta.Message = "Factura encontrada.";
-                respuesta.Data.Add(factura);
+                respuesta.Data.Add(await BuildFacturaResponse(factura, workshopId.Value));
 
                 return Ok(respuesta);
             }
@@ -772,9 +1044,128 @@ namespace TallerCrowned.Controllers
                 ?? "system";
         }
 
-        private static string NormalizeSerie(string? serie)
+        private async Task<object> BuildFacturaResponse(FacturaEmitida factura, int workshopId)
         {
-            var clean = string.IsNullOrWhiteSpace(serie) ? "A" : serie.Trim().ToUpperInvariant();
+            var rectificativas = new List<object>();
+            var items = NormalizeItemsForOutput(factura.ItemsJson);
+            var itemsJson = JsonSerializer.Serialize(
+                items,
+                new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+            var mostrarBanco = !IsPagoCredito(factura.TipoPago);
+
+            if (factura.TipoFactura != "Rectificativa")
+            {
+                var rectificativasDb = await _context.FacturasEmitidas
+                    .AsNoTracking()
+                    .Where(x =>
+                        !x.Eliminado &&
+                        x.TipoFactura == "Rectificativa" &&
+                        EF.Property<int>(x, "WorkshopId") == workshopId &&
+                        (x.FacturaOriginalId == factura.Id || x.NumeroFacturaRectificada == factura.NumeroFactura))
+                    .OrderByDescending(x => x.Fecha)
+                    .ThenByDescending(x => x.Id)
+                    .Select(x => new
+                    {
+                        x.Id,
+                        x.NumeroFactura,
+                        x.Fecha,
+                        x.Total,
+                        x.MotivoRectificacion
+                    })
+                    .ToListAsync();
+
+                rectificativas = rectificativasDb.Cast<object>().ToList();
+            }
+
+            return new
+            {
+                factura.Id,
+                factura.NumeroFactura,
+                factura.IdOrdenTrabajo,
+                factura.Fecha,
+                factura.Cliente,
+                factura.Dni,
+                factura.DireccionCliente,
+                factura.TelefonoCliente,
+                factura.Matricula,
+                factura.Km,
+                factura.Subtotal,
+                factura.Iva,
+                factura.Otros,
+                factura.Total,
+                factura.TotalFactura,
+                factura.TotalAbonado,
+                factura.SaldoPendiente,
+                factura.FechaVencimiento,
+                factura.TipoPago,
+                factura.EstadoCxC,
+                BankAccountId = mostrarBanco ? factura.BankAccountId : null,
+                BankAccountName = mostrarBanco ? factura.BankAccountName : null,
+                BankAccountIban = mostrarBanco ? factura.BankAccountIban : null,
+                LeyendaPago = BuildLeyendaPago(factura),
+                factura.TipoFactura,
+                factura.FacturaOriginalId,
+                factura.NumeroFacturaRectificada,
+                factura.MotivoRectificacion,
+                factura.ImporteRectificado,
+                factura.FechaRectificacion,
+                factura.Observaciones,
+                ItemsJson = itemsJson,
+                Items = items,
+                Rectificativas = rectificativas
+            };
+        }
+
+        private async Task<Cliente?> FindClienteForFactura(FacturaEmitidaCreateDto dto, OrdenTrabajo? orden, int workshopId)
+        {
+            var needsLookup =
+                string.IsNullOrWhiteSpace(dto.Dni) ||
+                string.IsNullOrWhiteSpace(dto.DireccionCliente) ||
+                string.IsNullOrWhiteSpace(dto.TelefonoCliente) ||
+                string.IsNullOrWhiteSpace(dto.Matricula) ||
+                string.IsNullOrWhiteSpace(dto.Km);
+
+            if (!needsLookup)
+                return null;
+
+            var matricula = FirstNonEmpty(dto.Matricula, orden?.Matricula)?.ToUpperInvariant();
+            var telefono = FirstNonEmpty(dto.TelefonoCliente, orden?.Telefono);
+            var cliente = FirstNonEmpty(dto.Cliente, orden?.Cliente)?.ToLowerInvariant();
+
+            return await _context.Clientes
+                .AsNoTracking()
+                .Where(x =>
+                    !x.Eliminado &&
+                    EF.Property<int>(x, "WorkshopId") == workshopId &&
+                    (
+                        (!string.IsNullOrEmpty(matricula) && x.Matricula.ToUpper() == matricula) ||
+                        (!string.IsNullOrEmpty(telefono) && x.Telefono == telefono) ||
+                        (!string.IsNullOrEmpty(cliente) && x.Nombre.ToLower() == cliente)
+                    ))
+                .OrderByDescending(x => !string.IsNullOrEmpty(matricula) && x.Matricula.ToUpper() == matricula)
+                .ThenByDescending(x => !string.IsNullOrEmpty(telefono) && x.Telefono == telefono)
+                .FirstOrDefaultAsync();
+        }
+
+        private static string? FirstNonEmpty(params string?[] values)
+        {
+            return values
+                .Select(x => x?.Trim())
+                .FirstOrDefault(x => !string.IsNullOrWhiteSpace(x));
+        }
+
+        private static string NormalizeTipoFactura(string? tipo)
+        {
+            var clean = string.IsNullOrWhiteSpace(tipo) ? "Normal" : tipo.Trim();
+            return clean.Equals("Recambio", StringComparison.OrdinalIgnoreCase)
+                ? "Recambio"
+                : "Normal";
+        }
+
+        private static string NormalizeSerie(string? serie, string defaultSerie = "A")
+        {
+            var fallback = string.IsNullOrWhiteSpace(defaultSerie) ? "A" : defaultSerie.Trim().ToUpperInvariant();
+            var clean = string.IsNullOrWhiteSpace(serie) ? fallback : serie.Trim().ToUpperInvariant();
             return clean.Length > 20 ? clean[..20] : clean;
         }
 
@@ -788,10 +1179,83 @@ namespace TallerCrowned.Controllers
             return Math.Round(value, 2, MidpointRounding.AwayFromZero);
         }
 
+        private async Task<WorkshopBankAccount?> ResolveBankAccount(int workshopId, int? bankAccountId)
+        {
+            IQueryable<WorkshopBankAccount> query = _context.WorkshopBankAccounts
+                .AsNoTracking()
+                .Where(x => x.WorkshopId == workshopId && x.Activo);
+
+            WorkshopBankAccount? bank = null;
+            if (bankAccountId.HasValue)
+            {
+                bank = await query.FirstOrDefaultAsync(x => x.Id == bankAccountId.Value);
+                if (bank == null)
+                    throw new ArgumentException("El banco seleccionado no pertenece al taller activo.");
+            }
+
+            bank ??= await query
+                .OrderByDescending(x => x.EsPrincipal)
+                .ThenBy(x => x.Id)
+                .FirstOrDefaultAsync();
+
+            if (bank != null)
+                return bank;
+
+            var workshop = await _context.Workshops.AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == workshopId);
+            if (workshop == null || string.IsNullOrWhiteSpace(workshop.Iban))
+                return null;
+
+            return new WorkshopBankAccount
+            {
+                WorkshopId = workshopId,
+                Nombre = "Cuenta principal",
+                Iban = workshop.Iban.Trim(),
+                EsPrincipal = true,
+                Activo = true
+            };
+        }
+
         private static string NormalizeTipoPago(string? tipoPago)
         {
             var clean = NormalizarTexto(tipoPago ?? "Contado");
-            return clean == "credito" ? "Credito" : "Contado";
+            return clean switch
+            {
+                "credito" or "credit" => "Credito",
+                "tpv" or "pos" or "tarjeta" or "datafono" => "TPV",
+                "transferencia" or "transfer" or "banco" => "Transferencia",
+                "efectivo" or "cash" => "Efectivo",
+                _ => "Contado"
+            };
+        }
+
+        private static bool IsPagoCredito(string? tipoPago)
+        {
+            return NormalizeTipoPago(tipoPago) == "Credito";
+        }
+
+        private static string BuildLeyendaPago(FacturaEmitida factura)
+        {
+            var tipoPago = NormalizeTipoPago(factura.TipoPago);
+
+            return tipoPago switch
+            {
+                "Credito" => factura.FechaVencimiento.HasValue
+                    ? $"PAGO A CREDITO. Vencimiento: {factura.FechaVencimiento:dd/MM/yyyy}"
+                    : "PAGO A CREDITO",
+                "TPV" => "PAGO POR TPV",
+                "Transferencia" => string.IsNullOrWhiteSpace(factura.BankAccountIban)
+                    ? "PAGO POR TRANSFERENCIA"
+                    : $"TRANSFERENCIA EN IBAN {factura.BankAccountIban}",
+                "Efectivo" => "PAGO EN EFECTIVO",
+                _ => "PAGO AL CONTADO"
+            };
+        }
+
+        private static string NormalizeTipoRectificativa(string? tipo)
+        {
+            var clean = NormalizarTexto(tipo ?? "Total");
+            return clean == "parcial" ? "Parcial" : "Total";
         }
 
         private static int NormalizePlazoCredito(int? plazo)
@@ -818,16 +1282,20 @@ namespace TallerCrowned.Controllers
 
         private static byte[] BuildInvoicePdf(FacturaEmitida factura)
         {
-            var items = DeserializeItems(factura.ItemsJson);
-            var ivaPct = factura.Subtotal > 0
+            var items = NormalizeItemsForOutput(factura.ItemsJson);
+            var servicios = items.Where(x => !EsLineaRepuesto(x)).ToList();
+            var recambios = items.Where(EsLineaRepuesto).ToList();
+            var ivaPct = factura.Subtotal != 0
                 ? Math.Round((factura.Iva / factura.Subtotal) * 100, 2)
                 : 0;
+            var esRectificativa = factura.TipoFactura == "Rectificativa";
 
             var lines = new List<string>
             {
-                "FACTURA",
+                esRectificativa ? "FACTURA RECTIFICATIVA" : "FACTURA",
                 $"Numero: {factura.NumeroFactura}",
                 $"Fecha: {factura.Fecha:dd/MM/yyyy}",
+                esRectificativa ? $"Rectifica factura: {factura.NumeroFacturaRectificada ?? ""}" : "",
                 "",
                 "Cliente",
                 $"Nombre: {factura.Cliente}",
@@ -840,11 +1308,8 @@ namespace TallerCrowned.Controllers
                 "Conceptos"
             };
 
-            foreach (var item in items)
-            {
-                var totalLinea = Round2(item.Cantidad * item.Importe);
-                lines.Add($"{item.Descripcion} | Cant.: {item.Cantidad:0.##} | Precio unitario: {item.Importe:0.00} EUR | Importe: {totalLinea:0.00} EUR");
-            }
+            AddInvoiceSection(lines, "Servicio (mano de obra)", servicios);
+            AddInvoiceSection(lines, "Recambios", recambios);
 
             lines.Add("");
             lines.Add($"Base imponible: {factura.Subtotal:0.00} EUR");
@@ -852,6 +1317,14 @@ namespace TallerCrowned.Controllers
             if (factura.Otros > 0)
                 lines.Add($"Otros/descuento: -{factura.Otros:0.00} EUR");
             lines.Add($"TOTAL: {factura.Total:0.00} EUR");
+            lines.Add(BuildLeyendaPago(factura));
+
+            if (esRectificativa && !string.IsNullOrWhiteSpace(factura.MotivoRectificacion))
+            {
+                lines.Add("");
+                lines.Add("Motivo de rectificacion");
+                lines.Add(factura.MotivoRectificacion);
+            }
 
             if (!string.IsNullOrWhiteSpace(factura.Observaciones))
             {
@@ -861,6 +1334,37 @@ namespace TallerCrowned.Controllers
             }
 
             return SimplePdf(lines);
+        }
+
+        private static List<FacturaItemDTO> NormalizeItemsForOutput(string? itemsJson)
+        {
+            return DeserializeItems(itemsJson)
+                .Where(x => !string.IsNullOrWhiteSpace(x.Descripcion))
+                .Select(x =>
+                {
+                    var item = NormalizeFacturaItem(x);
+                    item.Cantidad = item.Cantidad <= 0 ? 1 : Round2(item.Cantidad);
+                    item.Importe = Round2(item.Importe);
+                    item.PrecioCompra = item.PrecioCompra.HasValue ? Round2(item.PrecioCompra.Value) : null;
+                    return item;
+                })
+                .Where(x => Round2(x.Cantidad * x.Importe) != 0)
+                .ToList();
+        }
+
+        private static void AddInvoiceSection(List<string> lines, string title, IReadOnlyList<FacturaItemDTO> items)
+        {
+            if (items.Count == 0)
+                return;
+
+            lines.Add("");
+            lines.Add(title);
+
+            foreach (var item in items)
+            {
+                var totalLinea = Round2(item.Cantidad * item.Importe);
+                lines.Add($"{item.Descripcion} | Cant.: {item.Cantidad:0.##} | Precio unitario: {item.Importe:0.00} EUR | Importe: {totalLinea:0.00} EUR");
+            }
         }
 
         private static byte[] SimplePdf(IReadOnlyList<string> lines)
@@ -974,9 +1478,11 @@ namespace TallerCrowned.Controllers
         public int IvaPct { get; set; } = 21;
         public decimal Otros { get; set; }
         public string? TipoPago { get; set; }
+        public string? TipoFactura { get; set; }
         public decimal? TotalAbonado { get; set; }
         public DateTime? FechaVencimiento { get; set; }
         public int? PlazoCreditoDias { get; set; }
+        public int? BankAccountId { get; set; }
         public List<FacturaItemDTO>? Items { get; set; }
         public string? ItemsJson { get; set; }
     }
@@ -986,11 +1492,23 @@ namespace TallerCrowned.Controllers
         public decimal Importe { get; set; }
     }
 
+    public class FacturaRectificativaCreateDto
+    {
+        public string? Tipo { get; set; }
+        public string? Motivo { get; set; }
+        public decimal? Importe { get; set; }
+        public string? Descripcion { get; set; }
+        public DateTime? Fecha { get; set; }
+    }
+
     public class FacturaItemDTO
     {
         public string? Descripcion { get; set; }
         public decimal Cantidad { get; set; }
         public decimal Importe { get; set; }
+        [JsonPropertyName("precio")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public decimal? Precio { get; set; }
         public string? Tipo { get; set; }
         public string? Kind { get; set; }
         public int? RepuestoStockId { get; set; }

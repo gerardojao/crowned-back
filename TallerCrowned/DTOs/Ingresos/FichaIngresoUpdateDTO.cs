@@ -8,5 +8,6 @@
         public string? Descripcion { get; set; }
         public decimal? Importe { get; set; }
         public string? Foto { get; set; }
+        public int? BankAccountId { get; set; }
     }
 }

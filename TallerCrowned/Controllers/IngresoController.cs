@@ -4,6 +4,7 @@ using FamilyApp.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using TallerCrowned.Models;
 
 
 namespace FamilyApp.Controllers
@@ -125,6 +126,7 @@ namespace FamilyApp.Controllers
 
             var start = fechaInicio?.Date;
             var endExcl = fechaFin?.Date.AddDays(1);
+            var creditInvoiceNumbers = await GetCreditInvoiceNumbers(workshopId.Value);
             var raw = await _context.FichaIngresos
                 .AsNoTracking()                
                 .Where(f => !f.Eliminado
@@ -141,11 +143,17 @@ namespace FamilyApp.Controllers
                           TipoId = i.Id,
                           Tipo = i.NombreIngreso,
                           Descripcion = f.Descripcion,
-                          Importe = f.Importe
+                          Importe = f.Importe,
+                          f.BankAccountId,
+                          f.BankAccountName,
+                          f.BankAccountIban
                       })
                 .OrderByDescending(x => x.Fecha ?? DateTime.MinValue)
                 .ThenByDescending(x => x.Id)
                 .ToListAsync();
+            raw = raw
+                .Where(x => !IsCreditInvoiceAutoIncome(x.Descripcion, creditInvoiceNumbers))
+                .ToList();
             Console.WriteLine(raw);
             var respuesta = new Respuesta<object>
             {
@@ -168,17 +176,18 @@ namespace FamilyApp.Controllers
                 var workshopId = await _currentWorkshopService.GetCurrentWorkshopIdAsync();
                 if (!workshopId.HasValue) return Forbid();
 
+                var creditInvoiceNumbers = await GetCreditInvoiceNumbers(workshopId.Value);
                 var ingre = await (from _ingreso in _context.Ingresos
                                    join _fIngreso in _context.FichaIngresos on _ingreso.Id equals _fIngreso.NombreIngreso
                                    where !_fIngreso.Eliminado &&
                                    EF.Property<int>(_fIngreso, "WorkshopId") == workshopId.Value
-                                   select new { _ingreso.NombreIngreso, _fIngreso.Importe })
+                                   select new { _ingreso.NombreIngreso, _fIngreso.Importe, _fIngreso.Descripcion })
                                   .OrderByDescending(x => x.Importe)
                                   .ToListAsync();
 
                 if (ingre != null)
                 {
-                    var ingreT = from i in ingre
+                    var ingreT = from i in ingre.Where(x => !IsCreditInvoiceAutoIncome(x.Descripcion, creditInvoiceNumbers))
                                  group i by i.NombreIngreso into totals
                                  select new
                                  {
@@ -217,6 +226,7 @@ namespace FamilyApp.Controllers
                 var fi = fechaInicio.Date;
                 var ffExcl = fechaFin.Date.AddDays(1); // [fi, ffExcl)
 
+                var creditInvoiceNumbers = await GetCreditInvoiceNumbers(workshopId.Value);
                 var ingre = await (from i in _context.Ingresos.AsNoTracking()
                                    join f in _context.FichaIngresos.AsNoTracking() on i.Id equals f.NombreIngreso
                                    where !f.Eliminado                                  // <- filtro
@@ -224,11 +234,13 @@ namespace FamilyApp.Controllers
                                       && f.Fecha.HasValue
                                       && f.Fecha.Value >= fi
                                       && f.Fecha.Value < ffExcl
-                                   select new { i.NombreIngreso, f.Importe })
+                                   select new { i.NombreIngreso, f.Importe, f.Descripcion })
                                   .OrderByDescending(x => x.Importe)
                                   .ToListAsync();
 
-                var ingreT = ingre.GroupBy(x => x.NombreIngreso)
+                var ingreT = ingre
+                                  .Where(x => !IsCreditInvoiceAutoIncome(x.Descripcion, creditInvoiceNumbers))
+                                  .GroupBy(x => x.NombreIngreso)
                                   .Select(g => new { Cuenta_Ingreso = g.Key, Total = g.Sum(x => x.Importe) });
 
                 respuesta.Data.Add(ingreT);
@@ -309,6 +321,13 @@ namespace FamilyApp.Controllers
                 if (dto.Descripcion != null) fi.Descripcion = dto.Descripcion; // permite null para limpiar
                 if (dto.Importe.HasValue) fi.Importe = dto.Importe.Value;
                 if (dto.Foto != null) fi.Foto = dto.Foto;
+                if (dto.BankAccountId.HasValue)
+                {
+                    var bank = await ResolveBankAccount(workshopId.Value, dto.BankAccountId);
+                    fi.BankAccountId = bank?.Id;
+                    fi.BankAccountName = bank?.Nombre;
+                    fi.BankAccountIban = bank?.Iban;
+                }
 
                 await _context.SaveChangesAsync();
 
@@ -323,6 +342,65 @@ namespace FamilyApp.Controllers
                 respuesta.Message = e.Message + (e.InnerException != null ? " " + e.InnerException.Message : "");
                 return Ok(respuesta);
             }
+        }
+
+        private async Task<WorkshopBankAccount?> ResolveBankAccount(int workshopId, int? bankAccountId)
+        {
+            IQueryable<WorkshopBankAccount> query = _context.WorkshopBankAccounts
+                .AsNoTracking()
+                .Where(x => x.WorkshopId == workshopId && x.Activo);
+
+            WorkshopBankAccount? bank = null;
+            if (bankAccountId.HasValue)
+            {
+                bank = await query.FirstOrDefaultAsync(x => x.Id == bankAccountId.Value);
+                if (bank == null)
+                    throw new ArgumentException("El banco seleccionado no pertenece al taller activo.");
+            }
+
+            bank ??= await query
+                .OrderByDescending(x => x.EsPrincipal)
+                .ThenBy(x => x.Id)
+                .FirstOrDefaultAsync();
+
+            if (bank != null)
+                return bank;
+
+            var workshop = await _context.Workshops.AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == workshopId);
+            if (workshop == null || string.IsNullOrWhiteSpace(workshop.Iban))
+                return null;
+
+            return new WorkshopBankAccount
+            {
+                WorkshopId = workshopId,
+                Nombre = "Cuenta principal",
+                Iban = workshop.Iban.Trim(),
+                EsPrincipal = true,
+                Activo = true
+            };
+        }
+
+        private Task<List<string>> GetCreditInvoiceNumbers(int workshopId)
+        {
+            return _context.FacturasEmitidas
+                .AsNoTracking()
+                .Where(x =>
+                    !x.Eliminado &&
+                    x.TipoPago == "Credito" &&
+                    EF.Property<int>(x, "WorkshopId") == workshopId)
+                .Select(x => x.NumeroFactura)
+                .ToListAsync();
+        }
+
+        private static bool IsCreditInvoiceAutoIncome(string? descripcion, IEnumerable<string> creditInvoiceNumbers)
+        {
+            if (string.IsNullOrWhiteSpace(descripcion))
+                return false;
+
+            return creditInvoiceNumbers.Any(numero =>
+                !string.IsNullOrWhiteSpace(numero) &&
+                descripcion.Contains(numero, StringComparison.OrdinalIgnoreCase));
         }
 
         // DELETE lógico: marcar como eliminado

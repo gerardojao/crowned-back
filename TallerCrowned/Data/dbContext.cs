@@ -25,6 +25,7 @@ public partial class dbContext : DbContext
     public virtual DbSet<AppUser> Users { get; set; }
     public DbSet<PasswordReset> PasswordResets { get; set; } = default!;
     public virtual DbSet<OrdenTrabajo> OrdenesTrabajo { get; set; }
+    public virtual DbSet<PreOrdenTrabajo> PreOrdenesTrabajo { get; set; }
     public virtual DbSet<Cliente> Clientes { get; set; }
 
     public virtual DbSet<Proveedor> Proveedores { get; set; }
@@ -36,8 +37,10 @@ public partial class dbContext : DbContext
     public virtual DbSet<AlertaCliente> AlertasClientes { get; set; }
     public virtual DbSet<Presupuesto> Presupuestos { get; set; }
     public virtual DbSet<ServicioFrecuente> ServiciosFrecuentes { get; set; }
+    public virtual DbSet<MayorMovimiento> MayorMovimientos { get; set; }
     public virtual DbSet<Workshop> Workshops { get; set; }
     public virtual DbSet<WorkshopUser> WorkshopUsers { get; set; }
+    public virtual DbSet<WorkshopBankAccount> WorkshopBankAccounts { get; set; }
 
     // --- Auditoría automática ---
     public override int SaveChanges()
@@ -175,6 +178,12 @@ public partial class dbContext : DbContext
                 .HasDefaultValue("A")
                 .IsRequired();
 
+            b.Property(x => x.SerieFacturaRecambio)
+                .HasMaxLength(20)
+                .IsUnicode(false)
+                .HasDefaultValue("RC")
+                .IsRequired();
+
             b.Property(x => x.LogoPath)
                 .HasMaxLength(300)
                 .IsUnicode(false);
@@ -220,8 +229,24 @@ public partial class dbContext : DbContext
                 .HasDefaultValue(true)
                 .IsRequired();
 
+            b.Property(x => x.EnablePreOrders)
+                .HasDefaultValue(true)
+                .IsRequired();
+
+            b.Property(x => x.EnableSpecialInvoices)
+                .HasDefaultValue(true)
+                .IsRequired();
+
             b.Property(x => x.EnableAccountsReceivable)
                 .HasDefaultValue(true)
+                .IsRequired();
+
+            b.Property(x => x.EnableLedger)
+                .HasDefaultValue(true)
+                .IsRequired();
+
+            b.Property(x => x.AllowInvoiceClientEdit)
+                .HasDefaultValue(false)
                 .IsRequired();
 
             b.Property(x => x.Activo).HasDefaultValue(true);
@@ -260,6 +285,41 @@ public partial class dbContext : DbContext
             b.HasIndex(x => new { x.UserId, x.Activo });
         });
 
+        modelBuilder.Entity<WorkshopBankAccount>(b =>
+        {
+            b.ToTable("WorkshopBankAccount");
+
+            b.HasKey(x => x.Id);
+
+            b.Property(x => x.Nombre)
+                .HasMaxLength(120)
+                .IsUnicode(false)
+                .IsRequired();
+
+            b.Property(x => x.Iban)
+                .HasMaxLength(50)
+                .IsUnicode(false)
+                .IsRequired();
+
+            b.Property(x => x.EsPrincipal)
+                .HasDefaultValue(false)
+                .IsRequired();
+
+            b.Property(x => x.Activo)
+                .HasDefaultValue(true)
+                .IsRequired();
+
+            b.Property(x => x.FechaCreacion).HasColumnType("datetime");
+
+            b.HasOne(x => x.Workshop)
+                .WithMany()
+                .HasForeignKey(x => x.WorkshopId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            b.HasIndex(x => new { x.WorkshopId, x.Activo });
+            b.HasIndex(x => new { x.WorkshopId, x.Iban });
+        });
+
         // Egreso catálogo
         modelBuilder.Entity<Egreso>(entity =>
         {
@@ -287,6 +347,8 @@ public partial class dbContext : DbContext
             b.Property(e => e.Importe).HasColumnType("decimal(18, 2)");
             b.Property(e => e.Mes).HasMaxLength(10).IsUnicode(false);
             b.Property(e => e.Descripcion).HasMaxLength(50).IsRequired(false);
+            b.Property(e => e.BankAccountName).HasMaxLength(120).IsUnicode(false);
+            b.Property(e => e.BankAccountIban).HasMaxLength(50).IsUnicode(false);
             b.Property(e => e.Eliminado).HasDefaultValue(false);
 
             // auditoría (sombra)
@@ -312,6 +374,8 @@ public partial class dbContext : DbContext
             b.Property(e => e.Importe).HasColumnType("decimal(18, 2)");
             b.Property(e => e.Mes).HasMaxLength(10).IsUnicode(false);
             b.Property(e => e.Descripcion).HasMaxLength(500).IsRequired(false);
+            b.Property(e => e.BankAccountName).HasMaxLength(120).IsUnicode(false);
+            b.Property(e => e.BankAccountIban).HasMaxLength(50).IsUnicode(false);
             b.Property(e => e.Eliminado).HasDefaultValue(false);
 
             // auditoría (sombra)
@@ -345,6 +409,11 @@ public partial class dbContext : DbContext
                 .IsUnicode(false)
                 .IsRequired(false);
 
+            b.Property(e => e.Direccion)
+                .HasMaxLength(250)
+                .IsUnicode(false)
+                .IsRequired(false);
+
             b.Property(e => e.Matricula)
                 .HasMaxLength(20)
                 .IsUnicode(false)
@@ -365,6 +434,14 @@ public partial class dbContext : DbContext
 
             b.Property(e => e.Fecha)
                 .HasColumnType("datetime");
+
+            b.Property(e => e.FechaPrevistaEntrega)
+                .HasColumnType("datetime")
+                .IsRequired(false);
+
+            b.Property(e => e.TiempoEstimadoHoras)
+                .HasColumnType("decimal(18, 2)")
+                .IsRequired(false);
 
             b.Property(e => e.Trabajo)
                 .HasMaxLength(500)
@@ -408,6 +485,101 @@ public partial class dbContext : DbContext
             b.Property<DateTime>("FechaModificacion");
 
             ConfigureWorkshopShadow<OrdenTrabajo>(b);
+            b.HasIndex("UsuarioCreacion", "Eliminado", "Fecha");
+            b.HasIndex(e => e.Matricula);
+        });
+
+        modelBuilder.Entity<PreOrdenTrabajo>(b =>
+        {
+            b.ToTable("PreOrdenTrabajo");
+
+            b.Property(e => e.Cliente)
+                .HasMaxLength(150)
+                .IsUnicode(false)
+                .IsRequired();
+
+            b.Property(e => e.Dni)
+                .HasMaxLength(30)
+                .IsUnicode(false)
+                .IsRequired(false);
+
+            b.Property(e => e.Telefono)
+                .HasMaxLength(30)
+                .IsUnicode(false)
+                .IsRequired(false);
+
+            b.Property(e => e.Direccion)
+                .HasMaxLength(250)
+                .IsUnicode(false)
+                .IsRequired(false);
+
+            b.Property(e => e.Matricula)
+                .HasMaxLength(20)
+                .IsUnicode(false)
+                .IsRequired();
+
+            b.Property(e => e.Marca)
+                .HasMaxLength(80)
+                .IsUnicode(false)
+                .IsRequired(false);
+
+            b.Property(e => e.Modelo)
+                .HasMaxLength(80)
+                .IsUnicode(false)
+                .IsRequired();
+
+            b.Property(e => e.Kilometraje)
+                .IsRequired(false);
+
+            b.Property(e => e.Fecha)
+                .HasColumnType("datetime");
+
+            b.Property(e => e.FechaPrevistaEntrega)
+                .HasColumnType("datetime")
+                .IsRequired(false);
+
+            b.Property(e => e.TiempoEstimadoHoras)
+                .HasColumnType("decimal(18, 2)")
+                .IsRequired(false);
+
+            b.Property(e => e.MotivoRecepcion)
+                .HasMaxLength(1000)
+                .IsUnicode(false)
+                .IsRequired();
+
+            b.Property(e => e.DiagnosticoMecanico)
+                .HasMaxLength(1000)
+                .IsUnicode(false)
+                .IsRequired(false);
+
+            b.Property(e => e.RepuestosNecesarios)
+                .HasMaxLength(1000)
+                .IsUnicode(false)
+                .IsRequired(false);
+
+            b.Property(e => e.Observaciones)
+                .HasMaxLength(500)
+                .IsUnicode(false)
+                .IsRequired(false);
+
+            b.Property(e => e.Estado)
+                .HasMaxLength(50)
+                .IsUnicode(false)
+                .IsRequired();
+
+            b.Property(e => e.ConvertidaEnOrden)
+                .HasDefaultValue(false);
+
+            b.Property(e => e.Eliminado)
+                .HasDefaultValue(false);
+
+            b.Property<bool>("Activo").HasDefaultValue(true);
+            b.Property<string>("UsuarioCreacion").HasMaxLength(64);
+            b.Property<DateTime>("FechaCreacion");
+            b.Property<string>("UsuarioModificacion").HasMaxLength(64);
+            b.Property<DateTime>("FechaModificacion");
+
+            ConfigureWorkshopShadow<PreOrdenTrabajo>(b);
             b.HasIndex("UsuarioCreacion", "Eliminado", "Fecha");
             b.HasIndex(e => e.Matricula);
         });
@@ -698,6 +870,8 @@ public partial class dbContext : DbContext
             b.Property(x => x.TotalAbonado).HasColumnType("decimal(18,2)");
             b.Property(x => x.SaldoPendiente).HasColumnType("decimal(18,2)");
             b.Property(x => x.FechaVencimiento).HasColumnType("datetime");
+            b.Property(x => x.BankAccountName).HasMaxLength(120).IsUnicode(false);
+            b.Property(x => x.BankAccountIban).HasMaxLength(50).IsUnicode(false);
             b.Property(x => x.TipoPago)
                 .HasMaxLength(20)
                 .IsUnicode(false)
@@ -708,6 +882,20 @@ public partial class dbContext : DbContext
                 .IsUnicode(false)
                 .HasDefaultValue("Pagada")
                 .IsRequired();
+            b.Property(x => x.TipoFactura)
+                .HasMaxLength(20)
+                .IsUnicode(false)
+                .HasDefaultValue("Normal")
+                .IsRequired();
+            b.Property(x => x.NumeroFacturaRectificada)
+                .HasMaxLength(30)
+                .IsUnicode(false);
+            b.Property(x => x.MotivoRectificacion)
+                .HasMaxLength(500)
+                .IsUnicode(false);
+            b.Property(x => x.ImporteRectificado)
+                .HasColumnType("decimal(18,2)");
+            b.Property(x => x.FechaRectificacion).HasColumnType("datetime");
 
             b.Property(x => x.Eliminado).HasDefaultValue(false);
 
@@ -722,6 +910,8 @@ public partial class dbContext : DbContext
             b.HasIndex(x => x.IdOrdenTrabajo);
             b.HasIndex(x => x.EstadoCxC);
             b.HasIndex(x => x.FechaVencimiento);
+            b.HasIndex(x => x.TipoFactura);
+            b.HasIndex(x => x.FacturaOriginalId);
             b.HasIndex("UsuarioCreacion", "Eliminado");
         });
         modelBuilder.Entity<AlertaCliente>(b =>
@@ -871,6 +1061,53 @@ public partial class dbContext : DbContext
 
             ConfigureWorkshopShadow<ServicioFrecuente>(b);
             b.HasIndex("WorkshopId", nameof(ServicioFrecuente.Nombre)).IsUnique();
+            b.HasIndex("UsuarioCreacion", "Eliminado");
+        });
+
+        modelBuilder.Entity<MayorMovimiento>(b =>
+        {
+            b.ToTable("MayorMovimiento");
+
+            b.HasKey(x => x.Id);
+
+            b.Property(x => x.Cuenta)
+                .HasMaxLength(30)
+                .IsUnicode(false)
+                .IsRequired();
+
+            b.Property(x => x.TipoMovimiento)
+                .HasMaxLength(20)
+                .IsUnicode(false)
+                .IsRequired();
+
+            b.Property(x => x.Fecha)
+                .HasColumnType("datetime");
+
+            b.Property(x => x.Referencia)
+                .HasMaxLength(80)
+                .IsUnicode(false)
+                .IsRequired();
+
+            b.Property(x => x.Descripcion)
+                .HasMaxLength(500)
+                .IsUnicode(false);
+
+            b.Property(x => x.Importe)
+                .HasColumnType("decimal(18,2)");
+
+            b.Property(x => x.Eliminado)
+                .HasDefaultValue(false);
+
+            b.Property<bool>("Activo").HasDefaultValue(true);
+            b.Property<string>("UsuarioCreacion").HasMaxLength(64);
+            b.Property<DateTime>("FechaCreacion");
+            b.Property<string>("UsuarioModificacion").HasMaxLength(64);
+            b.Property<DateTime>("FechaModificacion");
+
+            ConfigureWorkshopShadow<MayorMovimiento>(b);
+            b.HasIndex(x => x.Cuenta);
+            b.HasIndex(x => x.TipoMovimiento);
+            b.HasIndex(x => x.Fecha);
             b.HasIndex("UsuarioCreacion", "Eliminado");
         });
 

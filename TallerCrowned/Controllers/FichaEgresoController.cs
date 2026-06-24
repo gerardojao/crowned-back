@@ -7,6 +7,7 @@ using FamilyApp.DTOs.Egresos;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
 using System.Globalization;
+using TallerCrowned.Models;
 
 namespace FamilyApp.Controllers
 {
@@ -95,6 +96,8 @@ namespace FamilyApp.Controllers
                 if (dto.Importe <= 0)
                     return BadRequest(new { message = "El importe debe ser mayor que 0." });
 
+                var bank = await ResolveBankAccount(workshopId.Value, dto.BankAccountId);
+
                 var fichaEgreso = new FichaEgreso
                 {
                     Foto = dto.Foto,
@@ -105,6 +108,9 @@ namespace FamilyApp.Controllers
                     NombreEgreso = dto.NombreEgreso,
                     Descripcion = dto.Descripcion?.Trim(),
                     Importe = dto.Importe,
+                    BankAccountId = bank?.Id,
+                    BankAccountName = bank?.Nombre,
+                    BankAccountIban = bank?.Iban,
                     Eliminado = false,
                     FechaEliminacion = null
                 };
@@ -168,6 +174,13 @@ namespace FamilyApp.Controllers
                 if (dto.Descripcion != null) fe.Descripcion = dto.Descripcion; // acepta null
                 if (dto.Importe.HasValue) fe.Importe = dto.Importe.Value;
                 if (dto.Foto != null) fe.Foto = dto.Foto;
+                if (dto.BankAccountId.HasValue)
+                {
+                    var bank = await ResolveBankAccount(workshopId.Value, dto.BankAccountId);
+                    fe.BankAccountId = bank?.Id;
+                    fe.BankAccountName = bank?.Nombre;
+                    fe.BankAccountIban = bank?.Iban;
+                }
 
                 await _context.SaveChangesAsync();
 
@@ -223,7 +236,42 @@ namespace FamilyApp.Controllers
             }
         }
 
+        private async Task<WorkshopBankAccount?> ResolveBankAccount(int workshopId, int? bankAccountId)
+        {
+            IQueryable<WorkshopBankAccount> query = _context.WorkshopBankAccounts
+                .AsNoTracking()
+                .Where(x => x.WorkshopId == workshopId && x.Activo);
 
+            WorkshopBankAccount? bank = null;
+            if (bankAccountId.HasValue)
+            {
+                bank = await query.FirstOrDefaultAsync(x => x.Id == bankAccountId.Value);
+                if (bank == null)
+                    throw new ArgumentException("El banco seleccionado no pertenece al taller activo.");
+            }
+
+            bank ??= await query
+                .OrderByDescending(x => x.EsPrincipal)
+                .ThenBy(x => x.Id)
+                .FirstOrDefaultAsync();
+
+            if (bank != null)
+                return bank;
+
+            var workshop = await _context.Workshops.AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == workshopId);
+            if (workshop == null || string.IsNullOrWhiteSpace(workshop.Iban))
+                return null;
+
+            return new WorkshopBankAccount
+            {
+                WorkshopId = workshopId,
+                Nombre = "Cuenta principal",
+                Iban = workshop.Iban.Trim(),
+                EsPrincipal = true,
+                Activo = true
+            };
+        }
     }
 
     public class FichaEgresoCreateDTO
@@ -234,5 +282,6 @@ namespace FamilyApp.Controllers
         public int NombreEgreso { get; set; }
         public string? Descripcion { get; set; }
         public decimal Importe { get; set; }
+        public int? BankAccountId { get; set; }
     }
 }

@@ -41,6 +41,7 @@ namespace TallerCrowned.Controllers
                     x.Telefono,
                     x.Iban,
                     x.SerieFactura,
+                    x.SerieFacturaRecambio,
                     x.LogoPath,
                     x.BusinessType,
                     x.TerminologyProfile,
@@ -52,7 +53,11 @@ namespace TallerCrowned.Controllers
                     x.EnableInvoiceExport,
                     x.EnableProfitAndLoss,
                     x.EnableDashboardRepairVehicles,
+                    x.EnablePreOrders,
+                    x.EnableSpecialInvoices,
                     x.EnableAccountsReceivable,
+                    x.EnableLedger,
+                    x.AllowInvoiceClientEdit,
                     ActiveUsers = _context.WorkshopUsers.Count(wu =>
                         wu.WorkshopId == x.Id &&
                         wu.Activo &&
@@ -99,6 +104,7 @@ namespace TallerCrowned.Controllers
                 Email = dto.Email?.Trim(),
                 Iban = dto.Iban?.Trim(),
                 SerieFactura = string.IsNullOrWhiteSpace(dto.SerieFactura) ? "A" : dto.SerieFactura.Trim().ToUpperInvariant(),
+                SerieFacturaRecambio = string.IsNullOrWhiteSpace(dto.SerieFacturaRecambio) ? "RC" : dto.SerieFacturaRecambio.Trim().ToUpperInvariant(),
                 LogoPath = dto.LogoPath?.Trim(),
                 BusinessType = businessType,
                 TerminologyProfile = terminologyProfile,
@@ -110,7 +116,11 @@ namespace TallerCrowned.Controllers
                 EnableInvoiceExport = dto.EnableInvoiceExport.GetValueOrDefault(true),
                 EnableProfitAndLoss = dto.EnableProfitAndLoss.GetValueOrDefault(true),
                 EnableDashboardRepairVehicles = dto.EnableDashboardRepairVehicles.GetValueOrDefault(true),
+                EnablePreOrders = dto.EnablePreOrders.GetValueOrDefault(true),
+                EnableSpecialInvoices = dto.EnableSpecialInvoices.GetValueOrDefault(true),
                 EnableAccountsReceivable = dto.EnableAccountsReceivable.GetValueOrDefault(true),
+                EnableLedger = dto.EnableLedger.GetValueOrDefault(true),
+                AllowInvoiceClientEdit = dto.AllowInvoiceClientEdit.GetValueOrDefault(false),
                 Activo = true,
                 FechaCreacion = DateTime.UtcNow
             };
@@ -355,6 +365,8 @@ namespace TallerCrowned.Controllers
                 workshop.Iban = string.IsNullOrWhiteSpace(dto.Iban) ? null : dto.Iban.Trim();
             if (dto.SerieFactura != null)
                 workshop.SerieFactura = string.IsNullOrWhiteSpace(dto.SerieFactura) ? "A" : dto.SerieFactura.Trim().ToUpperInvariant();
+            if (dto.SerieFacturaRecambio != null)
+                workshop.SerieFacturaRecambio = string.IsNullOrWhiteSpace(dto.SerieFacturaRecambio) ? "RC" : dto.SerieFacturaRecambio.Trim().ToUpperInvariant();
             if (dto.LogoPath != null)
                 workshop.LogoPath = string.IsNullOrWhiteSpace(dto.LogoPath) ? null : dto.LogoPath.Trim();
             if (dto.Activo.HasValue)
@@ -367,8 +379,16 @@ namespace TallerCrowned.Controllers
                 workshop.EnableProfitAndLoss = dto.EnableProfitAndLoss.Value;
             if (dto.EnableDashboardRepairVehicles.HasValue)
                 workshop.EnableDashboardRepairVehicles = dto.EnableDashboardRepairVehicles.Value;
+            if (dto.EnablePreOrders.HasValue)
+                workshop.EnablePreOrders = dto.EnablePreOrders.Value;
+            if (dto.EnableSpecialInvoices.HasValue)
+                workshop.EnableSpecialInvoices = dto.EnableSpecialInvoices.Value;
             if (dto.EnableAccountsReceivable.HasValue)
                 workshop.EnableAccountsReceivable = dto.EnableAccountsReceivable.Value;
+            if (dto.EnableLedger.HasValue)
+                workshop.EnableLedger = dto.EnableLedger.Value;
+            if (dto.AllowInvoiceClientEdit.HasValue)
+                workshop.AllowInvoiceClientEdit = dto.AllowInvoiceClientEdit.Value;
             if (dto.BusinessType != null)
                 workshop.BusinessType = NormalizeBusinessType(dto.BusinessType);
             if (dto.TerminologyProfile != null)
@@ -462,6 +482,7 @@ namespace TallerCrowned.Controllers
         public string? Email { get; set; }
         public string? Iban { get; set; }
         public string? SerieFactura { get; set; }
+        public string? SerieFacturaRecambio { get; set; }
         public string? LogoPath { get; set; }
         public string? BusinessType { get; set; }
         public string? TerminologyProfile { get; set; }
@@ -473,7 +494,11 @@ namespace TallerCrowned.Controllers
         public bool? EnableInvoiceExport { get; set; }
         public bool? EnableProfitAndLoss { get; set; }
         public bool? EnableDashboardRepairVehicles { get; set; }
+        public bool? EnablePreOrders { get; set; }
+        public bool? EnableSpecialInvoices { get; set; }
         public bool? EnableAccountsReceivable { get; set; }
+        public bool? EnableLedger { get; set; }
+        public bool? AllowInvoiceClientEdit { get; set; }
         public string? OwnerEmail { get; set; }
         public string? OwnerPassword { get; set; }
         public string? OwnerFullName { get; set; }
@@ -507,6 +532,7 @@ namespace TallerCrowned.Controllers
         public string? Email { get; set; }
         public string? Iban { get; set; }
         public string? SerieFactura { get; set; }
+        public string? SerieFacturaRecambio { get; set; }
         public string? LogoPath { get; set; }
         public bool? Activo { get; set; }
         public int? MaxUsers { get; set; }
@@ -519,6 +545,10 @@ namespace TallerCrowned.Controllers
         public bool? EnableInvoiceExport { get; set; }
         public bool? EnableProfitAndLoss { get; set; }
         public bool? EnableDashboardRepairVehicles { get; set; }
+        public bool? EnablePreOrders { get; set; }
+        public bool? EnableSpecialInvoices { get; set; }
         public bool? EnableAccountsReceivable { get; set; }
+        public bool? EnableLedger { get; set; }
+        public bool? AllowInvoiceClientEdit { get; set; }
     }
 }

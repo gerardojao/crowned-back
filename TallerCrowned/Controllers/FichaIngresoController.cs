@@ -5,6 +5,7 @@ using FamilyApp.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using TallerCrowned.Models;
 
 namespace FamilyApp.Controllers
 {
@@ -88,6 +89,10 @@ namespace FamilyApp.Controllers
                     return BadRequest(new { message = "El tipo de ingreso no pertenece al taller activo." });
 
                 // saneo básico (si lo necesitas)
+                var bank = await ResolveBankAccount(workshopId.Value, fichaIngreso.BankAccountId);
+                fichaIngreso.BankAccountId = bank?.Id;
+                fichaIngreso.BankAccountName = bank?.Nombre;
+                fichaIngreso.BankAccountIban = bank?.Iban;
                 fichaIngreso.Eliminado = false;
                 fichaIngreso.FechaEliminacion = null;
 
@@ -111,5 +116,41 @@ namespace FamilyApp.Controllers
         }
       
 
+        private async Task<WorkshopBankAccount?> ResolveBankAccount(int workshopId, int? bankAccountId)
+        {
+            IQueryable<WorkshopBankAccount> query = _context.WorkshopBankAccounts
+                .AsNoTracking()
+                .Where(x => x.WorkshopId == workshopId && x.Activo);
+
+            WorkshopBankAccount? bank = null;
+            if (bankAccountId.HasValue)
+            {
+                bank = await query.FirstOrDefaultAsync(x => x.Id == bankAccountId.Value);
+                if (bank == null)
+                    throw new ArgumentException("El banco seleccionado no pertenece al taller activo.");
+            }
+
+            bank ??= await query
+                .OrderByDescending(x => x.EsPrincipal)
+                .ThenBy(x => x.Id)
+                .FirstOrDefaultAsync();
+
+            if (bank != null)
+                return bank;
+
+            var workshop = await _context.Workshops.AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == workshopId);
+            if (workshop == null || string.IsNullOrWhiteSpace(workshop.Iban))
+                return null;
+
+            return new WorkshopBankAccount
+            {
+                WorkshopId = workshopId,
+                Nombre = "Cuenta principal",
+                Iban = workshop.Iban.Trim(),
+                EsPrincipal = true,
+                Activo = true
+            };
+        }
     }
 }
